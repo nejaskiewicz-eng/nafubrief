@@ -353,5 +353,7 @@ export const api = {
   },
 }
 
-export const portalLink = (client: Pick<Client, 'slug'>) => `${location.origin}/${client.slug}`
-export const briefLink = (client: Pick<Client, 'slug'>, brief: Pick<Brief, 'slug'>) => `${location.origin}/${client.slug}/${brief.slug}`
+/** Główny adres ankiet; linki zawsze na tej domenie, niezależnie od tego, skąd otwarto panel */
+const SITE = ((import.meta.env.VITE_SITE_URL as string | undefined) || location.origin).replace(/\/$/, '')
+export const portalLink = (client: Pick<Client, 'slug'>) => `${SITE}/${client.slug}`
+export const briefLink = (client: Pick<Client, 'slug'>, brief: Pick<Brief, 'slug'>) => `${SITE}/${client.slug}/${brief.slug}`

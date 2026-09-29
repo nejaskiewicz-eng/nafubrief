@@ -6,6 +6,13 @@
 [functions]
   node_bundler = "esbuild"
 
+# Stary adres Netlify przekierowuje na domenę główną
+[[redirects]]
+  from = "https://nafubrief.netlify.app/*"
+  to = "https://nafu-design.com/:splat"
+  status = 301
+  force = true
+
 # SPA: wszystkie ścieżki (panel, linki klientów) obsługuje React Router
 [[redirects]]
   from = "/*"

@@ -8,7 +8,7 @@ Narzędzie NAFU Design do zbierania briefów od klientów: ankiety online (strat
 
 1. **Panel → Nowy klient** - wpisujesz dane i zaznaczasz ankiety.
 2. Ankiety powstają jako **szkice** (kopie szablonów). Otwierasz każdą → **Pytania**: edytujesz, usuwasz, dodajesz pytania i całe części. **Podgląd** pokazuje ankietę oczami klienta.
-3. **Zatwierdź i wygeneruj linki** - linki zaczynają działać. Wysyłasz klientowi jeden link do wszystkich ankiet (np. `/optyka-perfect-hg98`) albo osobne (np. `/optyka-perfect-hg98/prawny`). 4 losowe znaki w adresie chronią przed zgadnięciem linku po nazwie firmy. Przycisk **Wiadomość do klienta** przygotowuje gotowy tekst.
+3. **Zatwierdź i wygeneruj linki** - linki zaczynają działać. Wysyłasz klientowi jeden link do wszystkich ankiet (np. `nafu-design.com/optyka-perfect-hg98`) albo osobne (np. `nafu-design.com/optyka-perfect-hg98/prawny`). 4 losowe znaki w adresie chronią przed zgadnięciem linku po nazwie firmy. Przycisk **Wiadomość do klienta** przygotowuje gotowy tekst.
 4. Klient wypełnia - odpowiedzi zapisują się automatycznie, może wracać w dowolnej chwili. Po kliknięciu **Wyślij** ankieta ma status „Wysłana” i widzisz ją w panelu (opcjonalnie dostajesz e-mail).
 5. **Podsumowanie AI** - agent czyta wszystkie odpowiedzi klienta i przygotowuje dokument roboczy: profil, wnioski, zakres strony, listę dokumentów prawnych z brakami, technikę, kierunek wizualny, pytania na rozmowę, ryzyka i konspekt pracy. Eksport do .md lub PDF.
 
@@ -51,13 +51,14 @@ git push -u origin main
 | `VITE_SUPABASE_ANON_KEY` | publishable / anon key |
 | `SUPABASE_URL` | to samo co wyżej |
 | `SUPABASE_ANON_KEY` | to samo co wyżej |
+| `VITE_SITE_URL` | `https://nafu-design.com` (od tego adresu zaczynają się linki do ankiet) |
 | `ANTHROPIC_API_KEY` | klucz z [platform.claude.com](https://platform.claude.com) |
 | `RESEND_API_KEY` *(opcjonalnie)* | klucz Resend - powiadomienia e-mail o wysłanej ankiecie |
 | `NOTIFY_EMAIL` *(opcjonalnie)* | gdzie wysyłać powiadomienia (domyślnie n.e.jaskiewicz@gmail.com) |
 | `NOTIFY_FROM` *(opcjonalnie)* | nadawca, np. `NAFU Brief <brief@nafudesign.pl>` (domena zweryfikowana w Resend) |
 
 3. **Deploys → Trigger deploy**.
-4. W Supabase: **Authentication → URL Configuration → Site URL** ustaw na adres z Netlify.
+4. W Supabase: **Authentication → URL Configuration → Site URL** ustaw na `https://nafu-design.com`.
 
 ## Bezpieczeństwo i RODO
 
