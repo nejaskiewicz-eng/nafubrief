@@ -7,12 +7,12 @@ import { isVisible, missingRequired, sectionProgress, surveyProgress } from '../
 import type { AnswerValue, Answers, PublicBrief } from '../../lib/types'
 
 export default function BriefFormPage() {
-  const { token = '' } = useParams()
+  const { client = '', brief = '' } = useParams()
   const [data, setData] = useState<PublicBrief | null | undefined>(undefined)
 
   useEffect(() => {
-    api.publicBrief(token).then(setData).catch(() => setData(null))
-  }, [token])
+    api.publicBrief(client, brief).then(setData).catch(() => setData(null))
+  }, [client, brief])
 
   if (data === undefined) return <Loading />
   if (data === null)
@@ -20,12 +20,22 @@ export default function BriefFormPage() {
   if (data.status === 'draft')
     return <Notice title="Ankieta jest jeszcze przygotowywana" text="Dopracowuję pytania specjalnie dla Ciebie. Wróć do tego linku za chwilę." />
 
-  return <BriefForm data={data} token={token} />
+  return <BriefForm data={data} token={data.token} notify={{ client, brief }} />
 }
 
 type SaveState = 'saved' | 'saving' | 'error' | 'idle'
 
-export function BriefForm({ data, token, preview }: { data: PublicBrief; token?: string; preview?: boolean }) {
+export function BriefForm({
+  data,
+  token,
+  notify,
+  preview,
+}: {
+  data: PublicBrief
+  token?: string
+  notify?: { client: string; brief: string }
+  preview?: boolean
+}) {
   const backupKey = token ? `nafu-brief-${token}` : ''
   const [answers, setAnswers] = useState<Answers>(() => {
     if (backupKey) {
@@ -138,7 +148,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
     setSending(true)
     clearTimeout(timer.current)
     try {
-      await api.savePublicBrief(token, answers, true)
+      await api.savePublicBrief(token, answers, true, notify)
       try {
         localStorage.removeItem(backupKey)
       } catch {

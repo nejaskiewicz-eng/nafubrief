@@ -11,12 +11,13 @@ export const handler: Handler = async (event) => {
   const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
   if (!key || !from || !url || !anon) return { statusCode: 204, body: '' }
 
-  const { token } = JSON.parse(event.body || '{}') as { token?: string }
-  if (!token || !/^[0-9a-f-]{36}$/i.test(token)) return { statusCode: 400, body: '' }
+  const { client, brief } = JSON.parse(event.body || '{}') as { client?: string; brief?: string }
+  const ok = (v?: string) => !!v && /^[a-z0-9-]{1,80}$/.test(v)
+  if (!ok(client) || !ok(brief)) return { statusCode: 400, body: '' }
 
   // Sprawdzamy przez publiczną funkcję, że ankieta faktycznie została właśnie wysłana.
   const db = createClient(url, anon)
-  const { data } = await db.rpc('get_brief', { p_token: token })
+  const { data } = await db.rpc('get_brief_by_slug', { p_client: client, p_brief: brief })
   const b = data as { status: string; title: string; client_name: string; submitted_at: string | null } | null
   if (!b || b.status !== 'submitted' || !b.submitted_at) return { statusCode: 204, body: '' }
   if (Date.now() - new Date(b.submitted_at).getTime() > 5 * 60 * 1000) return { statusCode: 204, body: '' }

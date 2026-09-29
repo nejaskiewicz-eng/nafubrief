@@ -8,7 +8,7 @@ Narzędzie NAFU Design do zbierania briefów od klientów: ankiety online (strat
 
 1. **Panel → Nowy klient** - wpisujesz dane i zaznaczasz ankiety.
 2. Ankiety powstają jako **szkice** (kopie szablonów). Otwierasz każdą → **Pytania**: edytujesz, usuwasz, dodajesz pytania i całe części. **Podgląd** pokazuje ankietę oczami klienta.
-3. **Zatwierdź i wygeneruj linki** - linki zaczynają działać. Wysyłasz klientowi jeden link do wszystkich ankiet (`/k/…`) albo osobne (`/b/…`). Przycisk **Wiadomość do klienta** przygotowuje gotowy tekst.
+3. **Zatwierdź i wygeneruj linki** - linki zaczynają działać. Wysyłasz klientowi jeden link do wszystkich ankiet (np. `/optyka-perfect-hg98`) albo osobne (np. `/optyka-perfect-hg98/prawny`). 4 losowe znaki w adresie chronią przed zgadnięciem linku po nazwie firmy. Przycisk **Wiadomość do klienta** przygotowuje gotowy tekst.
 4. Klient wypełnia - odpowiedzi zapisują się automatycznie, może wracać w dowolnej chwili. Po kliknięciu **Wyślij** ankieta ma status „Wysłana” i widzisz ją w panelu (opcjonalnie dostajesz e-mail).
 5. **Podsumowanie AI** - agent czyta wszystkie odpowiedzi klienta i przygotowuje dokument roboczy: profil, wnioski, zakres strony, listę dokumentów prawnych z brakami, technikę, kierunek wizualny, pytania na rozmowę, ryzyka i konspekt pracy. Eksport do .md lub PDF.
 
@@ -28,7 +28,7 @@ Bez pliku `.env` aplikacja działa w **trybie demo** (dane w przeglądarce, logo
 ### 1. Supabase
 
 1. Załóż projekt na [supabase.com](https://supabase.com) (region: Frankfurt / EU - dane klientów zostają w UE).
-2. **SQL Editor** → wklej całość `supabase/migrations/001_init.sql` → **Run**.
+2. **SQL Editor** → wklej po kolei pliki z `supabase/migrations/` (`001_init.sql`, potem `002_short_links.sql`) → **Run**.
 3. **Authentication → Users → Add user**: Twój e-mail i hasło (to konto do panelu).
 4. **Authentication → Sign In / Providers**: wyłącz **Allow new users to sign up** - tylko Ty masz konto.
 5. **Project Settings → API**: skopiuj *Project URL* i *publishable / anon key*.

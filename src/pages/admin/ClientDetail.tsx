@@ -109,7 +109,7 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
 
         <div className="card">
           {briefs.map((b) => (
-            <BriefRow key={b.id} b={b} reload={reload} />
+            <BriefRow key={b.id} b={b} client={client} reload={reload} />
           ))}
           {briefs.length === 0 && <p className="muted" style={{ padding: 24, margin: 0 }}>Ten klient nie ma jeszcze ankiet.</p>}
         </div>
@@ -130,10 +130,10 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
           {live.length ? (
             <>
               <div className="link-box">
-                <span>{portalLink(client.portal_token)}</span>
+                <span>{portalLink(client)}</span>
                 <button
                   className="btn btn-sm btn-primary"
-                  onClick={() => copyText(portalLink(client.portal_token)).then(() => toast('Skopiowano link'))}
+                  onClick={() => copyText(portalLink(client)).then(() => toast('Skopiowano link'))}
                 >
                   <Icon name="copy" size={15} /> Kopiuj
                 </button>
@@ -165,7 +165,7 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
   )
 }
 
-function BriefRow({ b, reload }: { b: Brief; reload: () => Promise<void> }) {
+function BriefRow({ b, client, reload }: { b: Brief; client: Client; reload: () => Promise<void> }) {
   const toast = useToast()
   const p = surveyProgress(b.schema, b.answers)
   const qs = b.schema.sections.reduce((n, s) => n + s.questions.length, 0)
@@ -204,7 +204,7 @@ function BriefRow({ b, reload }: { b: Brief; reload: () => Promise<void> }) {
           <Icon name="eye" size={15} /> Podgląd
         </Link>
         {b.status !== 'draft' && (
-          <button className="btn btn-sm" title="Kopiuj link do tej ankiety" onClick={() => copyText(briefLink(b.token)).then(() => toast('Skopiowano link do ankiety'))}>
+          <button className="btn btn-sm" title="Kopiuj link do tej ankiety" onClick={() => copyText(briefLink(client, b)).then(() => toast('Skopiowano link do ankiety'))}>
             <Icon name="link" size={15} /> Link
           </button>
         )}
@@ -271,9 +271,9 @@ function ShareModal({ client, briefs, onClose }: { client: Client; briefs: Brief
   const message = `Dzień dobry${first ? ` ${first}` : ''},
 
 przygotowałam dla Ciebie krótki brief do projektu strony. Wszystkie ankiety znajdziesz pod jednym linkiem:
-${portalLink(client.portal_token)}
+${portalLink(client)}
 
-${briefs.map((b) => `• ${b.title}: ${briefLink(b.token)}`).join('\n')}
+${briefs.map((b) => `• ${b.title}: ${briefLink(client, b)}`).join('\n')}
 
 Możesz wypełniać je w kilku podejściach, odpowiedzi zapisują się automatycznie. Jeśli czegoś nie wiesz, zostaw puste, omówimy to razem.
 

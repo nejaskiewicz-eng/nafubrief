@@ -16,9 +16,6 @@ import './styles.css'
 const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/panel" replace /> },
   { path: '/login', element: <Login /> },
-  // strony klienta - dostęp przez link z tokenem
-  { path: '/b/:token', element: <BriefFormPage /> },
-  { path: '/k/:token', element: <Portal /> },
   // podglądy (pełny ekran, bez menu panelu)
   { path: '/panel/ankieta/:id/podglad', element: <BriefPreview /> },
   { path: '/panel/szablony/:key/podglad', element: <BriefPreview /> },
@@ -33,6 +30,9 @@ const router = createBrowserRouter([
       { path: 'szablony', element: <Templates /> },
     ],
   },
+  // strony klienta: krótkie adresy, np. /optyka-perfect-hg98 i /optyka-perfect-hg98/prawny
+  { path: '/:client', element: <Portal /> },
+  { path: '/:client/:brief', element: <BriefFormPage /> },
   { path: '*', element: <Notice title="Nie ma takiej strony" text="Sprawdź, czy link jest kompletny." /> },
 ])
 

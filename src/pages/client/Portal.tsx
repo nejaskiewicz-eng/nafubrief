@@ -6,12 +6,12 @@ import type { PublicPortal } from '../../lib/types'
 import { Notice } from './BriefForm'
 
 export default function Portal() {
-  const { token = '' } = useParams()
+  const { client = '' } = useParams()
   const [data, setData] = useState<PublicPortal | null | undefined>(undefined)
 
   useEffect(() => {
-    api.portal(token).then(setData).catch(() => setData(null))
-  }, [token])
+    api.portal(client).then(setData).catch(() => setData(null))
+  }, [client])
 
   if (data === undefined) return <Loading />
   if (data === null) return <Notice title="Nie znaleziono strony" text="Link może być niepełny lub nieaktualny. Skontaktuj się ze mną, wyślę nowy." />
@@ -56,7 +56,7 @@ export default function Portal() {
                 </div>
               </div>
               <div className="actions">
-                <Link className={`btn ${b.status === 'submitted' ? '' : 'btn-primary'}`} to={`/b/${b.token}`}>
+                <Link className={`btn ${b.status === 'submitted' ? '' : 'btn-primary'}`} to={`/${data.client_slug}/${b.slug}`}>
                   {b.status === 'submitted' ? 'Zobacz' : b.status === 'in_progress' ? 'Kontynuuj' : 'Wypełnij'}
                 </Link>
               </div>

@@ -3,7 +3,7 @@ import { briefToMarkdown } from './format'
 import { isDemo, supabase } from './supabase'
 import type { Answers, Brief, Client, PublicBrief, PublicPortal, Summary, TemplateKey } from './types'
 
-export type ClientInput = Partial<Omit<Client, 'id' | 'portal_token' | 'created_at'>> & { name: string }
+export type ClientInput = Partial<Omit<Client, 'id' | 'portal_token' | 'slug' | 'created_at'>> & { name: string }
 export type ClientWithBriefs = Client & { briefs: Pick<Brief, 'id' | 'title' | 'status' | 'template_key' | 'submitted_at'>[] }
 
 const clone = <T,>(x: T): T => (x === undefined ? x : JSON.parse(JSON.stringify(x)))
@@ -32,13 +32,29 @@ interface DemoDB {
 }
 
 const DEMO_KEY = 'nafu-brief-demo'
+const BRIEF_SLUG: Record<string, string> = { strategy: 'strategia', legal: 'prawny', technical: 'techniczny', visual: 'wizualny' }
+const slugify = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+const code = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('')
+const clientSlug = (c: { company?: string | null; name: string }) => `${slugify(c.company || c.name) || 'klient'}-${code()}`
+function briefSlug(db: DemoDB, clientId: string, key: string) {
+  const base = BRIEF_SLUG[key] ?? key
+  let s = base
+  for (let n = 2; db.briefs.some((b) => b.client_id === clientId && b.slug === s); n++) s = `${base}-${n}`
+  return s
+}
 const uuid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
 
 function load(): DemoDB {
   try {
     const raw = localStorage.getItem(DEMO_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const db = JSON.parse(raw) as DemoDB
+      db.clients.forEach((c) => (c.slug ??= clientSlug(c)))
+      db.briefs.forEach((b) => (b.slug ??= briefSlug(db, b.client_id, b.template_key)))
+      return db
+    }
   } catch {
     /* ignoruj */
   }
@@ -52,6 +68,7 @@ function load(): DemoDB {
     industry: 'Salon optyczny',
     notes: 'Klient demonstracyjny, możesz go usunąć.',
     portal_token: uuid(),
+    slug: clientSlug({ company: 'Salon Optyczny Przykład', name: '' }),
     created_at: now(),
   }
   const db: DemoDB = { clients: [client], briefs: [], summaries: [] }
@@ -63,6 +80,7 @@ function load(): DemoDB {
       answers: {},
       status: 'sent',
       token: uuid(),
+      slug: BRIEF_SLUG[k],
       opened_at: null,
       submitted_at: null,
       created_at: now(),
@@ -146,13 +164,13 @@ export const api = {
       return demo((db) => {
         const c: Client = {
           company: null, email: null, phone: null, website: null, industry: null, notes: null,
-          ...input, id: uuid(), portal_token: uuid(), created_at: now(),
+          ...input, id: uuid(), portal_token: uuid(), slug: clientSlug(input), created_at: now(),
         }
         db.clients.push(c)
         templates.forEach((k, i) =>
           db.briefs.push({
             ...newBriefFromTemplate(k, i), id: uuid(), client_id: c.id, answers: {}, status: 'draft',
-            token: uuid(), opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
+            token: uuid(), slug: briefSlug(db, c.id, k), opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
         return c
@@ -200,7 +218,7 @@ export const api = {
       return demo((db) => {
         rows.forEach((r) =>
           db.briefs.push({
-            ...r, id: uuid(), answers: {}, status: 'draft', token: uuid(),
+            ...r, id: uuid(), answers: {}, status: 'draft', token: uuid(), slug: briefSlug(db, clientId, r.template_key),
             opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
@@ -281,23 +299,23 @@ export const api = {
     return row.id
   },
 
-  /* ---------- strona klienta (bez logowania) ---------- */
-  async publicBrief(token: string): Promise<PublicBrief | null> {
+  /* ---------- strona klienta (bez logowania, przez krótki adres) ---------- */
+  async publicBrief(clientSlug: string, slug: string): Promise<PublicBrief | null> {
     if (isDemo)
       return demo((db) => {
-        const b = db.briefs.find((x) => x.token === token)
-        if (!b) return null
-        const c = db.clients.find((x) => x.id === b.client_id)!
+        const c = db.clients.find((x) => x.slug === clientSlug)
+        const b = c && db.briefs.find((x) => x.client_id === c.id && x.slug === slug)
+        if (!c || !b) return null
         if (b.status === 'draft') return { status: 'draft', client_name: c.company ?? c.name } as PublicBrief
         b.opened_at ??= now()
         return {
           status: b.status, title: b.title, description: b.description, intro: b.intro, schema: b.schema,
-          answers: b.answers, client_name: c.company ?? c.name, submitted_at: b.submitted_at,
+          answers: b.answers, client_name: c.company ?? c.name, submitted_at: b.submitted_at, token: b.token,
         }
       })
-    return must(await sb().rpc('get_brief', { p_token: token }))
+    return must(await sb().rpc('get_brief_by_slug', { p_client: clientSlug, p_brief: slug }))
   },
-  async savePublicBrief(token: string, answers: Answers, submit = false) {
+  async savePublicBrief(token: string, answers: Answers, submit = false, notify?: { client: string; brief: string }) {
     if (isDemo)
       return demo((db) => {
         const b = db.briefs.find((x) => x.token === token)!
@@ -308,31 +326,32 @@ export const api = {
         b.updated_at = now()
       })
     must(await sb().rpc('save_brief', { p_token: token, p_answers: answers, p_submit: submit }))
-    if (submit) {
-      // powiadomienie e-mail (opcjonalne - działa, gdy skonfigurowano Resend)
+    if (submit && notify) {
+      // powiadomienie e-mail (opcjonalne, działa, gdy skonfigurowano Resend)
       fetch('/.netlify/functions/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify(notify),
       }).catch(() => {})
     }
   },
-  async portal(token: string): Promise<PublicPortal | null> {
+  async portal(clientSlug: string): Promise<PublicPortal | null> {
     if (isDemo)
       return demo((db) => {
-        const c = db.clients.find((x) => x.portal_token === token)
+        const c = db.clients.find((x) => x.slug === clientSlug)
         if (!c) return null
         return {
           client_name: c.company ?? c.name,
+          client_slug: c.slug,
           briefs: db.briefs
             .filter((b) => b.client_id === c.id && b.status !== 'draft')
             .sort((a, b) => a.position - b.position)
-            .map((b) => ({ title: b.title, description: b.description, status: b.status, token: b.token, template_key: b.template_key })),
+            .map((b) => ({ title: b.title, description: b.description, status: b.status, token: b.token, slug: b.slug, template_key: b.template_key })),
         }
       })
-    return must(await sb().rpc('get_portal', { p_token: token }))
+    return must(await sb().rpc('get_portal_by_slug', { p_client: clientSlug }))
   },
 }
 
-export const briefLink = (token: string) => `${location.origin}/b/${token}`
-export const portalLink = (token: string) => `${location.origin}/k/${token}`
+export const portalLink = (client: Pick<Client, 'slug'>) => `${location.origin}/${client.slug}`
+export const briefLink = (client: Pick<Client, 'slug'>, brief: Pick<Brief, 'slug'>) => `${location.origin}/${client.slug}/${brief.slug}`
