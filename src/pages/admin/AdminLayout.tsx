@@ -27,7 +27,34 @@ export default function AdminLayout() {
       homeFor('client').then(setClientHome)
       return <Loading />
     }
-    return <Navigate to={clientHome} replace />
+    return (
+      <div className="lg pw-screen">
+        <div className="lg-card pw-card">
+          <img src="/brand/logo-outline.webp" alt="NAFU design" style={{ height: 56, width: 'auto', justifySelf: 'start' }} />
+          <div>
+            <div className="eyebrow">Panel NAFU Brief</div>
+            <h2>Jesteś zalogowana na koncie klienta</h2>
+          </div>
+          <p className="note" style={{ fontSize: 14.5, color: 'rgba(255,255,255,.85)' }}>
+            W tej przeglądarce jest teraz zalogowane konto <strong style={{ color: '#fff' }}>{session.email}</strong>. Panel administratora wymaga Twojego konta. Wszystkie dane klientów są bezpieczne.
+          </p>
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              await api.signOut()
+              setSession(null)
+              nav('/login')
+            }}
+          >
+            Wyloguj i zaloguj się jako administrator
+          </button>
+          <button className="btn btn-outline-light" onClick={() => nav(clientHome)}>
+            Przejdź do strefy tego klienta
+          </button>
+          <p className="note">Konta klientów najlepiej testować w oknie prywatnym przeglądarki. Wtedy nie wylogowujesz się z panelu.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
