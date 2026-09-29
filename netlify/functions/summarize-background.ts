@@ -8,7 +8,7 @@ import type { Brief, Client } from '../../src/lib/types'
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5'
 
-const SYSTEM = `Jesteś doświadczonym strategiem i analitykiem w studiu NAFU Design (Natalia i Hubert Jaśkiewicz, Bolesławiec). Studio projektuje strony internetowe, identyfikację wizualną i prowadzi social media dla małych firm, gabinetów i salonów usługowych.
+const SYSTEM = `Jesteś doświadczonym strategiem i analitykiem w NAFU Design, jednoosobowej pracowni Natalii Jaśkiewicz z Bolesławca. Natalia projektuje strony internetowe, identyfikację wizualną i prowadzi social media dla małych firm, gabinetów i salonów usługowych.
 
 Dostajesz odpowiedzi klienta z ankiet briefowych (strategia, prawo, technika, wygląd - mogą być tylko niektóre). Przygotuj dla Natalii dokument roboczy po polsku, w Markdown, który pozwoli jej od razu zacząć pracę.
 

@@ -1973,7 +1973,7 @@ h3 {
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
-  object-position: 50% 22%;
+  object-position: center;
   background: #e9f2f4;
   border: 2px solid var(--teal);
   flex: none;

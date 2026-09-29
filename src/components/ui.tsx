@@ -5,7 +5,7 @@ export const CONTACT = {
   email: 'n.e.jaskiewicz@gmail.com',
   phone: '+48 571 786 388',
   phoneHref: 'tel:+48571786388',
-  names: 'Natalia i Hubert Jaśkiewicz',
+  names: 'Natalia Jaśkiewicz',
   city: 'Bolesławiec',
 }
 

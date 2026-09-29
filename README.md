@@ -83,4 +83,4 @@ supabase/          schemat bazy
 public/brand/      logo i key visual NAFU
 ```
 
-Kontakt: Natalia i Hubert Jaśkiewicz · NAFU Design · Bolesławiec · +48 571 786 388 · n.e.jaskiewicz@gmail.com
+Kontakt: Natalia Jaśkiewicz · NAFU Design · Bolesławiec · +48 571 786 388 · n.e.jaskiewicz@gmail.com

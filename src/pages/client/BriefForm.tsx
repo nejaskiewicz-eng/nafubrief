@@ -338,7 +338,7 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
               </span>
             </div>
             <div className="wl-hosts">
-              <img src="/brand/team.webp" alt="" />
+              <img src="/brand/natalia.webp" alt="" />
               <span>
                 <strong>{CONTACT.names}</strong>
                 <span>NAFU Design. Jeśli coś jest niejasne, zadzwoń</span>
@@ -398,10 +398,10 @@ function ThankYou({ data }: { data: PublicBrief }) {
               Gotowe
             </div>
             <h1 style={{ marginTop: 14 }}>
-              Dziękujemy<span className="accent">!</span>
+              Dziękuję<span className="accent">!</span>
             </h1>
             <p className="lead">
-              Twoje odpowiedzi „{data.title}” dotarły do NAFU Design. Przeanalizujemy je i odezwiemy się z propozycjami.
+              Twoje odpowiedzi „{data.title}” dotarły do NAFU Design. Przeanalizuję je i odezwę się z propozycjami.
               {'\n\n'}Jeśli chcesz coś dopisać albo zmienić, zadzwoń lub napisz.
             </p>
             <div className="row">

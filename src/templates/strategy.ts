@@ -161,7 +161,7 @@ export const strategy: Template = {
       {
         id: 's6',
         title: 'Kontakt z klientami',
-        description: 'Narzędzia do kontaktu z klientami. Wszystkie projektujemy i programujemy pod Twój sposób pracy.',
+        description: 'Narzędzia do kontaktu z klientami. Wszystkie projektuję i programuję pod Twój sposób pracy.',
         questions: [
           matrix('s6_tools', 'Oceń propozycje', [
             ['Rezerwacja online', 'Klient sam wybiera salon, usługę, specjalistę i termin'],
@@ -181,7 +181,7 @@ export const strategy: Template = {
         id: 's7',
         title: 'Nowi klienci',
         description:
-          'Narzędzia do docierania do nowych klientów. To kilka bardzo wstępnych narzędzi, które pokazują, co już działa u innych i jak wiele możemy zrobić. Na etapie projektowania na pewno będę miała więcej propozycji dopasowanych do Twojego salonu.',
+          'Narzędzia do docierania do nowych klientów. To kilka bardzo wstępnych narzędzi, które pokazują, co już działa u innych i jak wiele można zrobić. Na etapie projektowania na pewno będę miała więcej propozycji dopasowanych do Twojego salonu.',
         questions: [
           matrix('s7_tools', 'Oceń propozycje', [
             ['Prywatny asystent pozycjonowania', 'Stale monitoruje widoczność strony w Google i w odpowiedziach AI (SEO, AEO, GEO), podpowiada rozwiązania i automatycznie wdraża konieczne poprawki i ulepszenia'],
@@ -201,7 +201,7 @@ export const strategy: Template = {
         id: 's8',
         title: 'Elementy, które zaskakują',
         description:
-          'Każdy element projektujemy od zera, wyłącznie dla Twojej marki. Poniżej kilka luźno wybranych kierunków, które mają tylko ułatwić rozmowę. Możliwości są praktycznie nieograniczone, a konkretne pomysły przygotujemy dla Ciebie na spotkanie.',
+          'Każdy element projektuję od zera, wyłącznie dla Twojej marki. Poniżej kilka luźno wybranych kierunków, które mają tylko ułatwić rozmowę. Możliwości są praktycznie nieograniczone, a konkretne pomysły przygotuję dla Ciebie na spotkanie.',
         questions: [
           matrix('s8_wow', 'Oceń propozycje', [
             ['Interaktywne prowadzenie klienta', 'Kilka prostych kroków, po których klient wie, czego potrzebuje, i od razu może się umówić'],
