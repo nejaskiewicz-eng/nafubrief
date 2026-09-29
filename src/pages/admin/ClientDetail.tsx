@@ -372,11 +372,30 @@ function AddBriefsModal({ existing, onClose, onAdd }: { existing: TemplateKey[];
 
 type Form = 'ty' | 'pani' | 'pan'
 
-/** Wołacz imienia do powitania (typowe imiona żeńskie na -a); zawsze można poprawić ręcznie */
+/** Zdrobnienia w wołaczu do powitania na „Ty” (najpopularniejsze imiona) */
+const INFORMAL: Record<string, string> = {
+  aleksandra: 'Olu', anna: 'Aniu', joanna: 'Asiu', katarzyna: 'Kasiu', małgorzata: 'Gosiu', magdalena: 'Madziu',
+  agnieszka: 'Agnieszko', barbara: 'Basiu', elżbieta: 'Elu', ewa: 'Ewo', dorota: 'Doroto', monika: 'Moniko',
+  karolina: 'Karolino', paulina: 'Paulino', natalia: 'Natalio', marta: 'Marto', justyna: 'Justyno', beata: 'Beato',
+  agata: 'Agato', aneta: 'Aneto', iwona: 'Iwono', izabela: 'Izo', jolanta: 'Jolu', julia: 'Julio', kinga: 'Kingo',
+  klaudia: 'Klaudio', krystyna: 'Krysiu', maria: 'Marysiu', marzena: 'Marzeno', patrycja: 'Patrycjo', renata: 'Renato',
+  sylwia: 'Sylwio', urszula: 'Ulu', weronika: 'Weroniko', wiktoria: 'Wiktorio', zuzanna: 'Zuziu', emilia: 'Emilko',
+  alicja: 'Alu', dominika: 'Dominiko', edyta: 'Edyto', grażyna: 'Grażynko', halina: 'Halinko', teresa: 'Tereso',
+  adam: 'Adamie', andrzej: 'Andrzeju', bartosz: 'Bartku', damian: 'Damianie', daniel: 'Danielu', dawid: 'Dawidzie',
+  grzegorz: 'Grzesiu', hubert: 'Hubercie', jakub: 'Kubo', jan: 'Janku', jarosław: 'Jarku', kamil: 'Kamilu',
+  krzysztof: 'Krzysiu', łukasz: 'Łukaszu', maciej: 'Maćku', marcin: 'Marcinie', marek: 'Marku', mariusz: 'Mariuszu',
+  mateusz: 'Mateuszu', michał: 'Michale', paweł: 'Pawle', piotr: 'Piotrze', rafał: 'Rafale', robert: 'Robercie',
+  sebastian: 'Sebastianie', szymon: 'Szymonie', tomasz: 'Tomku', wojciech: 'Wojtku', zbigniew: 'Zbyszku',
+}
+
+/** Wołacz imienia do powitania; zawsze można poprawić ręcznie */
 function vocative(name: string, form: Form) {
   const first = name.trim().split(/\s+/)[0] ?? ''
-  if (!first) return ''
-  if (form === 'pan') return ''
+  if (!first || form === 'pan') return ''
+  if (form === 'ty') {
+    const inf = INFORMAL[first.toLowerCase()]
+    if (inf) return inf
+  }
   return /a$/i.test(first) ? first.replace(/a$/i, 'o') : first
 }
 
@@ -431,9 +450,16 @@ function ShareModal({ client, creds, onClose }: { client: Client; briefs: Brief[
       return 'ty'
     }
   })
+  const greetKey = (f: Form) => `nafu-greet-${client.id}-${f}`
   const defaultGreeting = (f: Form) => {
+    try {
+      const saved = localStorage.getItem(greetKey(f))
+      if (saved) return saved
+    } catch {
+      /* ignoruj */
+    }
     const v = vocative(client.name, f)
-    if (f === 'ty') return v ? `Dzień dobry ${v},` : 'Dzień dobry,'
+    if (f === 'ty') return v ? `Cześć ${v},` : 'Cześć,'
     if (f === 'pani') return v ? `Dzień dobry Pani ${v},` : 'Dzień dobry,'
     return 'Dzień dobry,'
   }
@@ -490,6 +516,11 @@ function ShareModal({ client, creds, onClose }: { client: Client; briefs: Brief[
             onChange={(e) => {
               setGreeting(e.target.value)
               setMessage(compose(form, e.target.value))
+              try {
+                localStorage.setItem(greetKey(form), e.target.value)
+              } catch {
+                /* ignoruj */
+              }
             }}
           />
         </label>
