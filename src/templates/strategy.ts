@@ -1,0 +1,263 @@
+import type { Template } from '../lib/types'
+import { area, matrix, multi, single, text } from './builders'
+
+export const strategy: Template = {
+  key: 'strategy',
+  title: 'Brief strategiczny strony',
+  short: 'Strategia',
+  description: 'Cele, klienci, charakter marki i pomysły na stronę, która pracuje na Twój biznes.',
+  intro:
+    'Wypełnienie zajmie około 15 minut. Prawie wszystko to zaznaczanie. Wygląd strony dobierzemy razem na rozmowie, na gotowych propozycjach wizualnych.\n\nPozycje w tabelach to luźno wybrane, pojedyncze przykłady. Mają tylko nakierować i ułatwić Ci decyzje. Zakres możliwości, kreatywnych mechanizmów i sposobów uatrakcyjnienia strony ogranicza wyłącznie wyobraźnia.',
+  minutes: 15,
+  accent: '#0A8FB0',
+  schema: {
+    sections: [
+      {
+        id: 's1',
+        title: 'Cele',
+        questions: [
+          multi('s1_tool', 'Czy chcesz, żeby Twoja strona przestała być wyłącznie wizytówką i stała się pełnoprawnym wsparciem Twojego salonu? Zaznacz, jakim narzędziem ma być:', [
+            'Nowoczesnym',
+            'Profesjonalnym',
+            'Kompletnym, obejmującym wszystkie usługi i salony',
+            'Interaktywnym i angażującym',
+            'Spełniającym aktualne zasady cyfrowej obecności marki w Google, AI i social media',
+            'Stale dostosowywanym do zmieniających się zasad',
+            'Połączonym z wizytówkami Google i social media w jeden system',
+            'Pracującym na rezerwacje i sprzedaż przez całą dobę',
+            'Wygodnym dla zespołu w codziennej pracy',
+          ]),
+          area('s1_why', 'Co sprawia, że klienci wybierają właśnie Ciebie, a nie konkurencję?'),
+          area('s1_future', 'Jak wyobrażasz sobie swoją stronę za rok, dwa lata?', {
+            help: 'Jaki ma wpływ na salon, jak działa, jak pracujesz z nią na co dzień? Czym według Ciebie mogłaby się stać?',
+          }),
+        ],
+      },
+      {
+        id: 's2',
+        title: 'Pierwszy plan',
+        description: 'Co ma być na stronie na pierwszym planie.',
+        questions: [
+          multi('s2_first', 'Co klient ma przede wszystkim zobaczyć i poczuć po wejściu na Twoją stronę? Zaznacz wszystko, co pasuje.', [
+            'Wysoką jakość i elegancję salonu',
+            'Rodzinną tradycję i historię firmy',
+            'Wiedzę i doświadczenie: porady, odpowiedzi na pytania',
+            'Możliwość szybkiego umówienia wizyty z każdego miejsca strony',
+            'Ludzi: poznanie zespołu jeszcze przed wizytą',
+            'Osobną część strony dla wybranej grupy klientów, np. dzieci',
+            'Elementy, które angażują i zaskakują',
+            'Oprawki, marki i kolekcje do obejrzenia',
+            'Możliwość zakupu online, np. bonów lub produktów',
+            'Codzienne życie salonu: aktualności, wydarzenia, filmy',
+          ]),
+          multi('s2_lang', 'W jakich językach ma być strona?', ['Polski', 'Angielski', 'Niemiecki', 'Czeski', 'Ukraiński'], { allowOther: true }),
+        ],
+      },
+      {
+        id: 's3',
+        title: 'Twoi klienci',
+        questions: [
+          multi('s3_groups', 'Kim są Twoi główni klienci? Zaznacz wszystkie grupy, które do Ciebie przychodzą.', [
+            'Dzieci i młodzież',
+            'Rodzice',
+            'Studenci',
+            'Osoby pracujące przy komputerze',
+            'Kierowcy',
+            'Osoby aktywne i sportowcy',
+            'Osoby po 40. roku życia',
+            'Seniorzy',
+            'Klienci szukający marek premium i luksusowych oprawek',
+            'Firmy i ich pracownicy',
+            'Turyści i obcokrajowcy',
+          ], { allowOther: true }),
+          area('s3_more', 'Których klientów chcesz mieć więcej?'),
+          area('s3_loyalty', 'Jak często klienci do Ciebie wracają i co Twoim zdaniem wpływa na ich lojalność?'),
+          single('s3_edu', 'Czy chcesz edukować klientów w zakresie ochrony wzroku?', [
+            'Tak, to ważna część naszej działalności',
+            'Tak, w podstawowym zakresie',
+            'Nie',
+          ]),
+          area('s3_compare', 'Czy klienci porównują Twoją ofertę z konkurencją? Jeśli tak, to w jakim zakresie?'),
+          area('s3_relation', 'Co jest dla Ciebie kluczowe w budowaniu relacji z klientami?'),
+        ],
+      },
+      {
+        id: 's4',
+        title: 'Charakter marki',
+        questions: [
+          multi('s4_feel', 'Jakie wrażenie ma robić strona? Zaznacz maksymalnie 3.', [
+            'Elegancka',
+            'Ciepła i rodzinna',
+            'Nowoczesna',
+            'Medyczna, profesjonalna',
+            'Rzemieślnicza',
+            'Luksusowa',
+            'Radosna, kolorowa',
+            'Spokojna, minimalistyczna',
+          ], { max: 3 }),
+          multi('s4_person', 'Gdyby Twoja firma była człowiekiem, kim by była? Zaznacz wszystkie, które pasują.', [
+            'Doświadczony specjalista, któremu się ufa',
+            'Mistrz rzemiosła',
+            'Przyjaciel rodziny',
+            'Stylista',
+            'Cierpliwy nauczyciel',
+            'Pasjonat nowinek',
+          ]),
+          single('s4_tone', 'Jak mówimy do klientów?', [
+            'Na „Ty”, w drugiej osobie liczby pojedynczej (rekomendowane)',
+            'Na „Pan/Pani”',
+            'Zależnie od grupy',
+          ], {
+            help: 'Rekomenduję mówić bezpośrednio, w drugiej osobie liczby pojedynczej. Każda osoba, która wejdzie na stronę, od razu czuje, że firma zwraca się wyłącznie do niej. Dzięki temu czuje się wyjątkowa i jedyna w swoim rodzaju.',
+          }),
+          multi('s4_emotion', 'Co ma poczuć klient, który pierwszy raz wejdzie na Twoją stronę? Zaznacz wszystkie, które pasują.', [
+            'Zaufanie',
+            'Spokój i bezpieczeństwo',
+            'Poczucie, że ktoś się nim zaopiekuje',
+            'Ciekawość',
+            'Radość',
+            'Podziw dla jakości',
+            'Chęć natychmiastowego umówienia wizyty',
+          ]),
+          text('s4_motto', 'Czy masz hasło lub motto, z którym klienci Cię kojarzą?'),
+          area('s4_liked', 'Strony z dowolnej branży, które lubisz, i za co (opcjonalnie)'),
+          multi('s4_values', 'Jakie wartości są kluczowe dla Twojego salonu? Zaznacz wszystkie, które pasują.', [
+            'Profesjonalizm',
+            'Indywidualne podejście',
+            'Rzetelność i uczciwość',
+            'Troska o zdrowie',
+            'Tradycja i rzemiosło',
+            'Innowacyjność',
+            'Prestiż i luksus',
+            'Dostępność dla każdego',
+            'Rodzinna atmosfera',
+          ], { allowOther: true }),
+          area('s4_mission', 'Czy masz określoną misję marki? Jeśli tak, jaka ona jest? (opcjonalnie)'),
+          area('s4_perception', 'Jak chciałbyś, aby klienci postrzegali Twoją markę za kilka lat?'),
+        ],
+      },
+      {
+        id: 's5',
+        title: 'Co ma przekonywać klientów',
+        description:
+          'Poniżej kilka luźnych propozycji, które mają tylko nakreślić, o co chodzi w tym temacie. Sposobów przekonywania klientów jest znacznie więcej. Wszystkie omówimy wspólnie, a na etapie projektowania na pewno przyjdą do głowy kolejne. Trzeba jednak od czegoś zacząć.',
+        questions: [
+          matrix('s5_ways', 'Oceń propozycje', [
+            ['Opinie i liczby', 'Opinie klientów, liczba obsłużonych osób, lata na rynku'],
+            ['Autorytet', 'Dyplomy, nagrody, sprzęt, członkostwa'],
+            ['Ludzie', 'Zespół z imienia i nazwiska, osobiste historie'],
+            ['Historia rodzinna', 'Opowieść o założycielach i kolejnych pokoleniach'],
+            ['Coś na start', 'Bezpłatna porada, test online, poradnik'],
+            ['Bezpieczny wybór', 'Gwarancje, bezpłatny serwis, jasne zasady'],
+            ['Pakiety do wyboru', 'Warianty: dobry, lepszy, najlepszy'],
+            ['Promocje z terminem', 'Akcje z datą końca, sezonowe oferty'],
+            ['Klub stałego klienta', 'Karta, rabaty dla rodziny'],
+            ['Lokalność', '„Jesteśmy stąd”, a nie z sieciówki'],
+            ['Sygnały ostrzegawcze', 'Kiedy nie zwlekać z wizytą'],
+          ]),
+          area('s5_ideas', 'Twoje pomysły'),
+        ],
+      },
+      {
+        id: 's6',
+        title: 'Kontakt z klientami',
+        description: 'Narzędzia do kontaktu z klientami. Wszystkie projektujemy i programujemy pod Twój sposób pracy.',
+        questions: [
+          matrix('s6_tools', 'Oceń propozycje', [
+            ['Rezerwacja online', 'Klient sam wybiera salon, usługę, specjalistę i termin'],
+            ['Panel pacjenta', 'Wizyty, historia, przekładanie terminu bez telefonu'],
+            ['Przypomnienia SMS lub e-mail', 'Mniej nieobecności'],
+            ['„Zamówienie gotowe do odbioru”', 'Automatyczna informacja dla klienta'],
+            ['Zaproszenie na kolejną kontrolę', 'Wiadomość po roku lub dwóch'],
+            ['Prośba o opinię w Google', 'Automatycznie po wizycie'],
+            ['Asystent AI 24/7', 'Odpowiada na pytania i kieruje do rezerwacji'],
+            ['WhatsApp, Messenger, „oddzwonimy”', 'Szybki kontakt bez czekania na linii'],
+            ['Płatności i bony online', 'Zadatki, BLIK, bony podarunkowe'],
+          ]),
+          area('s6_ideas', 'Twoje pomysły'),
+        ],
+      },
+      {
+        id: 's7',
+        title: 'Nowi klienci',
+        description:
+          'Narzędzia do docierania do nowych klientów. To kilka bardzo wstępnych narzędzi, które pokazują, co już działa u innych i jak wiele możemy zrobić. Na etapie projektowania na pewno będę miała więcej propozycji dopasowanych do Twojego salonu.',
+        questions: [
+          matrix('s7_tools', 'Oceń propozycje', [
+            ['Prywatny asystent pozycjonowania', 'Stale monitoruje widoczność strony w Google i w odpowiedziach AI (SEO, AEO, GEO), podpowiada rozwiązania i automatycznie wdraża konieczne poprawki i ulepszenia'],
+            ['Atrakcyjna wizytówka Google', 'Stała opieka nad Profilem Firmy w Google: zdjęcia, wpisy, odpowiedzi na opinie, aktualne informacje'],
+            ['Połączenie strony z social media i Google', 'Spójne dane, treści i opinie we wszystkich kanałach'],
+            ['Własny system publikacji', 'Jeden panel do publikowania na wszystkich kanałach social media i w Google'],
+            ['Asystent publikacji', 'Indywidualnie wyszkolony asystent, który do każdego posta sam przygotowuje wszystko, co odpowiada za zasięgi i pozycjonowanie: opisy, słowa kluczowe, hashtagi, teksty alternatywne do każdego obrazu i karuzeli. Najlepiej działa razem z asystentem pozycjonowania'],
+            ['Poradnik ekspercki', 'Treści, które sprawiają, że Google i AI polecają Cię jako eksperta'],
+            ['Program poleceń', 'Klient poleca znajomego, obaj zyskują'],
+            ['Newsletter lub SMS', 'Nowości i promocje dla stałych klientów'],
+            ['Oferta dla firm', 'Osobna ścieżka dla pracodawców i ich pracowników'],
+          ]),
+          area('s7_ideas', 'Twoje pomysły'),
+        ],
+      },
+      {
+        id: 's8',
+        title: 'Elementy, które zaskakują',
+        description:
+          'Każdy element projektujemy od zera, wyłącznie dla Twojej marki. Poniżej kilka luźno wybranych kierunków, które mają tylko ułatwić rozmowę. Możliwości są praktycznie nieograniczone, a konkretne pomysły przygotujemy dla Ciebie na spotkanie.',
+        questions: [
+          matrix('s8_wow', 'Oceń propozycje', [
+            ['Interaktywne prowadzenie klienta', 'Kilka prostych kroków, po których klient wie, czego potrzebuje, i od razu może się umówić'],
+            ['Doświadczenie efektu na ekranie', 'Klient na własne oczy widzi różnicę, jaką daje Twoja usługa lub produkt'],
+            ['Strefa dla najmłodszych', 'Zabawa i nauka, które oswajają dziecko z wizytą, a rodzicowi dają wiedzę'],
+            ['Strona reagująca na klienta', 'Elementy, które odpowiadają na ruch kursora, dotyk i przewijanie'],
+            ['Rozszerzona rzeczywistość', 'Przymierzanie produktów przez kamerę telefonu'],
+            ['Grafika 3D i wideo sterowane przewijaniem', 'Produkt, pracownia lub salon pokazane w ruchu i w przestrzeni'],
+            ['Wirtualne zwiedzanie 360°', 'Klient poznaje salon, zanim przyjdzie'],
+            ['Personalizacja', 'Strona dopasowuje treści do odwiedzającego, np. nowego i stałego klienta'],
+            ['Samodzielne sprawdzenie', 'Krótkie testy i listy kontrolne, po których klient wie, czy powinien przyjść'],
+            ['Nagrody i niespodzianki', 'Odblokowywane rabaty, odznaki, ukryte elementy do odkrycia'],
+            ['Wyliczenie korzyści', 'Przy abonamentach i programach rabatowych, np. na soczewki kontaktowe'],
+            ['Opowieść przewijana', 'Historia firmy lub usługi opowiedziana obrazem i ruchem'],
+          ]),
+          area('s8_ideas', 'Twoje pomysły'),
+          text('s8_link', 'Strona lub efekt, który Cię zachwycił (link, opcjonalnie)', { placeholder: 'https://' }),
+        ],
+      },
+      {
+        id: 's9',
+        title: 'Wyróżnione usługi i teksty',
+        questions: [
+          area('s9_premium', 'Czy jest usługa, oferta, produkt lub marka premium, na których wyeksponowaniu szczególnie Ci zależy?', {
+            help: 'Pomiń standardowy zakres salonu optycznego.',
+          }),
+          area('s9_seasonal', 'Czy masz produkty lub akcje sezonowe, które warto eksponować w różnych okresach roku?'),
+          single('s9_texts', 'Teksty na stronie. Czy odpowiada Ci ten układ?', [
+            'Tak',
+            'Wolę w pełni sam przygotować teksty i dostarczyć je zgodnie z wytycznymi, które dla mnie przygotujesz',
+          ], {
+            help: 'Proponuję taki układ:\n1. Dostarczasz mi informacje, które są indywidualne dla Twojego salonu: o zespole, markach, sprzęcie, usługach.\n2. Na ich podstawie przygotowuję wszystkie teksty.\n3. Dostajesz gotową stronę do przeczytania i zapisujesz wszystkie uwagi i poprawki.\n4. Omawiamy je razem, a ja je wdrażam.\n5. Stronę publikujemy dopiero wtedy, gdy jesteś z niej zadowolony.',
+          }),
+          single('s9_prices', 'Ceny na stronie', ['Dokładne', '„Od”', 'Bez cen']),
+        ],
+      },
+      {
+        id: 's10',
+        title: 'Czas i plany',
+        questions: [
+          single('s10_time', 'Jak bardzo zależy Ci na czasie?', [
+            'Chcę mieć stronę jak najszybciej i jestem gotowy na intensywną współpracę. Strona może być gotowa w 4 do 6 tygodni, a przy świetnie idącej współpracy nawet szybciej.',
+            'Wolę nie zakładać konkretnego terminu i zostawić sobie swobodę oraz ewentualnie więcej czasu na zadania po mojej stronie. Postaram się, żeby wszystko szło jak najszybciej, tylko bez presji.',
+            'Wolę dłuższy czas i więcej przestrzeni na podejmowanie decyzji, przesyłanie materiałów i zgłaszanie uwag.',
+          ]),
+          text('s10_deadline', 'Czy jest wydarzenie lub data, do której strona musi działać?'),
+          multi('s10_plans', 'Jakie masz plany na najbliższe lata? Strona będzie na nie przygotowana od początku.', [
+            'Nowy salon',
+            'Nowe usługi',
+            'Rozbudowa zespołu',
+            'Sprzedaż online',
+            'Osobna marka dla wybranej grupy klientów',
+            'Zmiana lub odświeżenie identyfikacji wizualnej',
+          ], { allowOther: true }),
+        ],
+      },
+    ],
+  },
+}
