@@ -370,66 +370,141 @@ function AddBriefsModal({ existing, onClose, onAdd }: { existing: TemplateKey[];
   )
 }
 
-function ShareModal({ client, briefs, creds, onClose }: { client: Client; briefs: Brief[]; creds: { email: string; password: string } | null; onClose: () => void }) {
-  const toast = useToast()
-  const first = client.name.split(' ')[0]
-  const login = creds
-    ? `Założyłam dla Ciebie konto, na którym wypełnisz ankiety:
-Adres logowania: ${loginLink()}
-E-mail: ${creds.email}
-Hasło: ${creds.password}
-Po zalogowaniu możesz zmienić hasło na własne.`
-    : client.login_email
-      ? `Zaloguj się na swoje konto: ${loginLink()}
-E-mail: ${client.login_email}`
-      : ''
-  const message = `Dzień dobry${first ? ` ${first}` : ''},
+type Form = 'ty' | 'pani' | 'pan'
 
-przygotowałam dla Ciebie krótki brief do projektu strony. Wszystkie ankiety znajdziesz tutaj:
-${portalLink(client)}
+/** Wołacz imienia do powitania (typowe imiona żeńskie na -a); zawsze można poprawić ręcznie */
+function vocative(name: string, form: Form) {
+  const first = name.trim().split(/\s+/)[0] ?? ''
+  if (!first) return ''
+  if (form === 'pan') return ''
+  return /a$/i.test(first) ? first.replace(/a$/i, 'o') : first
+}
 
-${briefs.map((b) => `• ${b.title}: ${briefLink(client, b)}`).join('\n')}
-${login ? `\n${login}\n` : ''}
-Możesz wypełniać ankiety w kilku podejściach, odpowiedzi zapisują się automatycznie. Jeśli czegoś nie wiesz, zostaw puste, omówimy to razem.
+function buildMessage(o: { form: Form; greeting: string; hasAccount: boolean; creds: { email: string; password: string } | null; loginEmail: string | null; portal: string }) {
+  const ty = o.form === 'ty'
+  const P = o.form === 'pani' ? 'Pani' : 'Pan'
+  const t = (tyText: string, panText: string) => (ty ? tyText : panText)
 
-Krótki poradnik, jak korzystać ze strefy klienta: ${SITE_URL}/poradnik.pdf
+  const access = o.creds
+    ? t(
+        `Zaloguj się tutaj: ${loginLink()}\nE-mail: ${o.creds.email}\nHasło tymczasowe: ${o.creds.password}\n\nPrzy pierwszym logowaniu ustawisz własne hasło.`,
+        `Proszę zalogować się tutaj: ${loginLink()}\nE-mail: ${o.creds.email}\nHasło tymczasowe: ${o.creds.password}\n\nPrzy pierwszym logowaniu ustawi ${P} własne hasło.`,
+      )
+    : o.hasAccount
+      ? t(
+          `Panel znajdziesz tutaj: ${loginLink()}\nLogujesz się adresem ${o.loginEmail}. Jeśli nie pamiętasz hasła, daj znać, ustawię nowe.`,
+          `Panel znajdzie ${P} tutaj: ${loginLink()}\nLogowanie adresem ${o.loginEmail}. Jeśli hasło wypadło z pamięci, proszę dać znać, ustawię nowe.`,
+        )
+      : t(`Panel znajdziesz tutaj: ${o.portal}\nDane do logowania prześlę Ci osobno.`, `Panel znajdzie ${P} tutaj: ${o.portal}\nDane do logowania prześlę osobno.`)
 
-W razie pytań jestem pod telefonem ${CONTACT.phone} i mailem ${CONTACT.email}.
+  return `${o.greeting}
+
+${t(
+  'przygotowałam dla Ciebie panel klienta. Zbierzemy w nim wszystko, czego potrzebuję do projektu Twojej nowej strony: kilka krótkich ankiet, dane firmy, zdjęcia, informacje o zespole i usługach.',
+  `przygotowałam dla ${o.form === 'pani' ? 'Pani' : 'Pana'} panel klienta. Zbierzemy w nim wszystko, czego potrzebuję do projektu nowej strony: kilka krótkich ankiet, dane firmy, zdjęcia, informacje o zespole i usługach.`,
+)}
+
+${access}
+
+${t(
+  'Nie musisz robić wszystkiego za jednym razem. Wszystko zapisuje się na bieżąco, więc możesz wracać, kiedy znajdziesz chwilę. Jeśli na któreś pytanie nie znasz odpowiedzi, po prostu je pomiń, omówimy to razem.',
+  `Nie musi ${P} robić wszystkiego za jednym razem. Wszystko zapisuje się na bieżąco, więc można wracać w dowolnej chwili. Jeśli na któreś pytanie nie zna ${P} odpowiedzi, wystarczy je pominąć, omówimy to razem.`,
+)}
+
+${t('W załączniku przesyłam krótki poradnik, jak korzystać z panelu.', 'W załączniku przesyłam krótki poradnik, jak korzystać z panelu.')}
+
+${t('Gdyby coś było niejasne, zadzwoń albo napisz.', 'Gdyby coś było niejasne, proszę dzwonić albo pisać.')}
 
 Pozdrawiam serdecznie
 Natalia Jaśkiewicz
-NAFU Design`
-  const mailto = `mailto:${client.email ?? ''}?subject=${encodeURIComponent('Brief projektu strony, NAFU Design')}&body=${encodeURIComponent(message)}`
+NAFU Design
+${CONTACT.phone}`
+}
+
+function ShareModal({ client, creds, onClose }: { client: Client; briefs: Brief[]; creds: { email: string; password: string } | null; onClose: () => void }) {
+  const toast = useToast()
+  const prefKey = `nafu-form-${client.id}`
+  const [form, setForm] = useState<Form>(() => {
+    try {
+      return (localStorage.getItem(prefKey) as Form) || 'ty'
+    } catch {
+      return 'ty'
+    }
+  })
+  const defaultGreeting = (f: Form) => {
+    const v = vocative(client.name, f)
+    if (f === 'ty') return v ? `Dzień dobry ${v},` : 'Dzień dobry,'
+    if (f === 'pani') return v ? `Dzień dobry Pani ${v},` : 'Dzień dobry,'
+    return 'Dzień dobry,'
+  }
+  const [greeting, setGreeting] = useState(() => defaultGreeting(form))
+  const compose = (f: Form, g: string) =>
+    buildMessage({ form: f, greeting: g, hasAccount: !!client.user_id, creds, loginEmail: client.login_email, portal: portalLink(client) })
+  const [message, setMessage] = useState(() => compose(form, greeting))
+
+  const changeForm = (f: Form) => {
+    const g = defaultGreeting(f)
+    setForm(f)
+    setGreeting(g)
+    setMessage(compose(f, g))
+    try {
+      localStorage.setItem(prefKey, f)
+    } catch {
+      /* ignoruj */
+    }
+  }
+  const mailto = `mailto:${client.email ?? client.login_email ?? ''}?subject=${encodeURIComponent('Panel klienta do projektu strony')}&body=${encodeURIComponent(message)}`
 
   return (
     <Modal label="Wiadomość do klienta" onClose={onClose}>
       <div className="eyebrow">Wysyłka</div>
-      <h2 style={{ marginTop: 8 }}>Wiadomość z linkami</h2>
-      <p className="muted" style={{ marginTop: 4 }}>Skopiuj i wyślij e-mailem, SMS-em lub w komunikatorze.</p>
+      <h2 style={{ marginTop: 8 }}>Wiadomość do klienta</h2>
+      <p className="muted" style={{ marginTop: 4 }}>Możesz ją jeszcze dowolnie zmienić. Do maila dołącz poradnik PDF.</p>
       {creds && (
         <p className="card" style={{ padding: '10px 14px', background: 'var(--warn-50)', borderColor: '#f4e0b4', fontSize: 14, margin: '0 0 12px' }}>
           Hasło widzisz tylko teraz, nie jest nigdzie zapisane. Skopiuj wiadomość przed zamknięciem okna.
         </p>
       )}
-      {!client.user_id && (
-        <p className="card" style={{ padding: '10px 14px', background: 'var(--warn-50)', borderColor: '#f4e0b4', fontSize: 14, margin: '0 0 12px' }}>
-          Klient nie ma jeszcze konta, więc może tylko przejrzeć pytania. Załóż mu konto w sekcji „Dostęp klienta”.
-        </p>
-      )}
-      <textarea className="textarea" style={{ minHeight: 300, fontSize: 14 }} defaultValue={message} id="share-msg" />
+      <div className="form-grid" style={{ marginBottom: 12, alignItems: 'end' }}>
+        <div className="field">
+          <span className="label">Forma zwracania się</span>
+          <div className="seg" role="radiogroup" aria-label="Forma zwracania się">
+            {(
+              [
+                ['ty', 'Na „Ty”'],
+                ['pani', 'Pani'],
+                ['pan', 'Pan'],
+              ] as Array<[Form, string]>
+            ).map(([k, l]) => (
+              <button key={k} type="button" role="radio" aria-checked={form === k} className={form === k ? 'on' : ''} onClick={() => changeForm(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="field">
+          <span className="label">Powitanie</span>
+          <input
+            className="input"
+            value={greeting}
+            onChange={(e) => {
+              setGreeting(e.target.value)
+              setMessage(compose(form, e.target.value))
+            }}
+          />
+        </label>
+      </div>
+      <textarea className="textarea" style={{ minHeight: 320, fontSize: 14 }} value={message} onChange={(e) => setMessage(e.target.value)} />
       <div className="modal-actions">
-        {client.email && (
+        <a className="btn" href="/poradnik.pdf" download="NAFU-strefa-klienta-poradnik.pdf">
+          <Icon name="download" size={16} /> Poradnik PDF
+        </a>
+        {(client.email || client.login_email) && (
           <a className="btn" href={mailto}>
             <Icon name="mail" size={16} /> Otwórz w poczcie
           </a>
         )}
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            const v = (document.getElementById('share-msg') as HTMLTextAreaElement).value
-            copyText(v).then(() => toast('Skopiowano wiadomość'))
-          }}
-        >
+        <button className="btn btn-primary" onClick={() => copyText(message).then(() => toast('Skopiowano wiadomość'))}>
           <Icon name="copy" size={16} /> Kopiuj wiadomość
         </button>
       </div>
