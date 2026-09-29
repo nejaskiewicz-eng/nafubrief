@@ -6,11 +6,11 @@ Narzędzie NAFU Design do zbierania briefów od klientów: ankiety online (strat
 
 ## Jak to działa
 
-1. **Panel → Nowy klient** — wpisujesz dane i zaznaczasz ankiety.
+1. **Panel → Nowy klient** - wpisujesz dane i zaznaczasz ankiety.
 2. Ankiety powstają jako **szkice** (kopie szablonów). Otwierasz każdą → **Pytania**: edytujesz, usuwasz, dodajesz pytania i całe części. **Podgląd** pokazuje ankietę oczami klienta.
-3. **Zatwierdź i wygeneruj linki** — linki zaczynają działać. Wysyłasz klientowi jeden link do wszystkich ankiet (`/k/…`) albo osobne (`/b/…`). Przycisk **Wiadomość do klienta** przygotowuje gotowy tekst.
-4. Klient wypełnia — odpowiedzi zapisują się automatycznie, może wracać w dowolnej chwili. Po kliknięciu **Wyślij** ankieta ma status „Wysłana” i widzisz ją w panelu (opcjonalnie dostajesz e-mail).
-5. **Podsumowanie AI** — agent czyta wszystkie odpowiedzi klienta i przygotowuje dokument roboczy: profil, wnioski, zakres strony, listę dokumentów prawnych z brakami, technikę, kierunek wizualny, pytania na rozmowę, ryzyka i konspekt pracy. Eksport do .md lub PDF.
+3. **Zatwierdź i wygeneruj linki** - linki zaczynają działać. Wysyłasz klientowi jeden link do wszystkich ankiet (`/k/…`) albo osobne (`/b/…`). Przycisk **Wiadomość do klienta** przygotowuje gotowy tekst.
+4. Klient wypełnia - odpowiedzi zapisują się automatycznie, może wracać w dowolnej chwili. Po kliknięciu **Wyślij** ankieta ma status „Wysłana” i widzisz ją w panelu (opcjonalnie dostajesz e-mail).
+5. **Podsumowanie AI** - agent czyta wszystkie odpowiedzi klienta i przygotowuje dokument roboczy: profil, wnioski, zakres strony, listę dokumentów prawnych z brakami, technikę, kierunek wizualny, pytania na rozmowę, ryzyka i konspekt pracy. Eksport do .md lub PDF.
 
 Szablony pytań są w `src/templates/*.ts` (strategia, prawny, techniczny, wizualny).
 
@@ -21,16 +21,16 @@ npm install
 npm run dev
 ```
 
-Bez pliku `.env` aplikacja działa w **trybie demo** (dane w przeglądarce, logowanie bez hasła) — dobre do oglądania i testów.
+Bez pliku `.env` aplikacja działa w **trybie demo** (dane w przeglądarce, logowanie bez hasła) - dobre do oglądania i testów.
 
 ## Wdrożenie (jednorazowo, ok. 15 minut)
 
 ### 1. Supabase
 
-1. Załóż projekt na [supabase.com](https://supabase.com) (region: Frankfurt / EU — dane klientów zostają w UE).
+1. Załóż projekt na [supabase.com](https://supabase.com) (region: Frankfurt / EU - dane klientów zostają w UE).
 2. **SQL Editor** → wklej całość `supabase/migrations/001_init.sql` → **Run**.
 3. **Authentication → Users → Add user**: Twój e-mail i hasło (to konto do panelu).
-4. **Authentication → Sign In / Providers**: wyłącz **Allow new users to sign up** — tylko Ty masz konto.
+4. **Authentication → Sign In / Providers**: wyłącz **Allow new users to sign up** - tylko Ty masz konto.
 5. **Project Settings → API**: skopiuj *Project URL* i *publishable / anon key*.
 
 ### 2. GitHub
@@ -43,7 +43,7 @@ git push -u origin main
 ### 3. Netlify
 
 1. **Add new project → Import from Git** → wybierz repozytorium. Ustawienia buildu czyta z `netlify.toml`.
-2. **Site configuration → Environment variables** — dodaj:
+2. **Site configuration → Environment variables** - dodaj:
 
 | Zmienna | Wartość |
 |---|---|
@@ -52,7 +52,7 @@ git push -u origin main
 | `SUPABASE_URL` | to samo co wyżej |
 | `SUPABASE_ANON_KEY` | to samo co wyżej |
 | `ANTHROPIC_API_KEY` | klucz z [platform.claude.com](https://platform.claude.com) |
-| `RESEND_API_KEY` *(opcjonalnie)* | klucz Resend — powiadomienia e-mail o wysłanej ankiecie |
+| `RESEND_API_KEY` *(opcjonalnie)* | klucz Resend - powiadomienia e-mail o wysłanej ankiecie |
 | `NOTIFY_EMAIL` *(opcjonalnie)* | gdzie wysyłać powiadomienia (domyślnie n.e.jaskiewicz@gmail.com) |
 | `NOTIFY_FROM` *(opcjonalnie)* | nadawca, np. `NAFU Brief <brief@nafudesign.pl>` (domena zweryfikowana w Resend) |
 
@@ -61,15 +61,15 @@ git push -u origin main
 
 ## Bezpieczeństwo i RODO
 
-- Tabele są chronione RLS — dostęp ma tylko zalogowana właścicielka.
+- Tabele są chronione RLS - dostęp ma tylko zalogowana właścicielka.
 - Klient bez logowania widzi wyłącznie ankietę, do której ma link (losowy token UUID), przez funkcje `get_brief` / `save_brief` / `get_portal`. Szkice są niewidoczne, wysłanej ankiety nie da się nadpisać (chyba że ją odblokujesz w panelu).
-- Strony mają `noindex` — nie trafią do Google.
-- Klucz Anthropic jest tylko po stronie serwera (funkcja Netlify). Odpowiedzi klientów są przekazywane do API Claude wyłącznie przy generowaniu podsumowania — uwzględnij to w swojej umowie powierzenia / informacji dla klientów.
+- Strony mają `noindex` - nie trafią do Google.
+- Klucz Anthropic jest tylko po stronie serwera (funkcja Netlify). Odpowiedzi klientów są przekazywane do API Claude wyłącznie przy generowaniu podsumowania - uwzględnij to w swojej umowie powierzenia / informacji dla klientów.
 - W ankietach są ostrzeżenia, żeby nie wpisywać haseł ani danych klientów.
 
 ## Agent AI
 
-`netlify/functions/summarize-background.ts` — funkcja w tle (do 15 min). Model domyślnie `claude-opus-5-5` (zmiana: zmienna `ANTHROPIC_MODEL`), z adaptacyjnym myśleniem i automatycznym modelem zapasowym (`fallbacks: "default"`), gdyby główny model odmówił odpowiedzi. Instrukcje agenta (struktura podsumowania) są w stałej `SYSTEM` w tym pliku.
+`netlify/functions/summarize-background.ts` - funkcja w tle (do 15 min). Model domyślnie `claude-opus-5-5` (zmiana: zmienna `ANTHROPIC_MODEL`), z adaptacyjnym myśleniem i automatycznym modelem zapasowym (`fallbacks: "default"`), gdyby główny model odmówił odpowiedzi. Instrukcje agenta (struktura podsumowania) są w stałej `SYSTEM` w tym pliku.
 
 ## Struktura
 

@@ -99,7 +99,7 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
             </div>
             <h2 style={{ marginTop: 8 }}>Sprawdź pytania w {drafts.length === 1 ? 'ankiecie' : `${drafts.length} ankietach`}</h2>
             <p style={{ margin: '8px 0 18px' }}>
-              Szkice nie są jeszcze widoczne dla klienta. Otwórz każdą ankietę, dopasuj, usuń lub dodaj pytania — a potem zatwierdź, żeby linki zaczęły działać.
+              Szkice nie są jeszcze widoczne dla klienta. Otwórz każdą ankietę, dopasuj, usuń lub dodaj pytania, a potem zatwierdź, żeby linki zaczęły działać.
             </p>
             <button className="btn btn-primary" onClick={publish}>
               Zatwierdź i wygeneruj linki
@@ -125,7 +125,7 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
           <div className="eyebrow">{drafts.length ? 'Krok 2 z 2' : 'Wysyłka'}</div>
           <h3 style={{ fontSize: 20, margin: '8px 0 6px', color: 'var(--ink)' }}>Link dla klienta</h3>
           <p className="muted" style={{ fontSize: 14, marginTop: 0 }}>
-            Jeden link do wszystkich ankiet — klient wypełnia je w dowolnej kolejności.
+            Jeden link do wszystkich ankiet. Klient wypełnia je w dowolnej kolejności.
           </p>
           {live.length ? (
             <>
@@ -244,7 +244,7 @@ function AddBriefsModal({ existing, onClose, onAdd }: { existing: TemplateKey[];
     <Modal label="Dodaj ankietę" onClose={onClose}>
       <div className="eyebrow">Dodaj ankietę</div>
       <h2 style={{ marginTop: 8, marginBottom: 16 }}>Wybierz szablony</h2>
-      {existing.length > 0 && <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>Możesz dodać ten sam szablon ponownie — np. osobną ankietę dla drugiej firmy klienta.</p>}
+      {existing.length > 0 && <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>Możesz dodać ten sam szablon ponownie, np. osobną ankietę dla drugiej firmy klienta.</p>}
       <TemplatePicker picked={picked} onChange={setPicked} />
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
@@ -275,14 +275,14 @@ ${portalLink(client.portal_token)}
 
 ${briefs.map((b) => `• ${b.title}: ${briefLink(b.token)}`).join('\n')}
 
-Możesz wypełniać je w kilku podejściach — odpowiedzi zapisują się automatycznie. Jeśli czegoś nie wiesz, zostaw puste, omówimy to razem.
+Możesz wypełniać je w kilku podejściach, odpowiedzi zapisują się automatycznie. Jeśli czegoś nie wiesz, zostaw puste, omówimy to razem.
 
 W razie pytań jestem pod telefonem ${CONTACT.phone} i mailem ${CONTACT.email}.
 
 Pozdrawiam serdecznie
 Natalia Jaśkiewicz
 NAFU Design`
-  const mailto = `mailto:${client.email ?? ''}?subject=${encodeURIComponent('Brief projektu strony — NAFU Design')}&body=${encodeURIComponent(message)}`
+  const mailto = `mailto:${client.email ?? ''}?subject=${encodeURIComponent('Brief projektu strony, NAFU Design')}&body=${encodeURIComponent(message)}`
 
   return (
     <Modal label="Wiadomość do klienta" onClose={onClose}>
@@ -339,7 +339,7 @@ function AiTab({ client, briefs }: { client: Client; briefs: Brief[] }) {
     try {
       const id = await api.requestSummary(client.id, instructions)
       setActiveId(id)
-      toast('Agent AI pracuje — to potrwa 1–3 minuty')
+      toast('Agent AI pracuje, to potrwa 1-3 minuty')
       await load()
     } catch (e) {
       toast((e as Error).message)
@@ -361,7 +361,7 @@ function AiTab({ client, briefs }: { client: Client; briefs: Brief[] }) {
           <div className="empty">
             <Spinner />
             <h3>Agent analizuje odpowiedzi…</h3>
-            <p className="muted" style={{ margin: 0 }}>Zwykle trwa to 1–3 minuty. Możesz zostawić tę stronę.</p>
+            <p className="muted" style={{ margin: 0 }}>Zwykle trwa to 1-3 minuty. Możesz zostawić tę stronę.</p>
           </div>
         ) : active.status === 'error' ? (
           <div className="empty">

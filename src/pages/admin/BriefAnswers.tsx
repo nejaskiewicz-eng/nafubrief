@@ -25,7 +25,7 @@ export default function BriefAnswers() {
   if (!brief || !client) return <Spinner />
 
   const p = surveyProgress(brief.schema, brief.answers)
-  const md = briefToMarkdown(`${brief.title} — ${client.company || client.name}`, brief.schema, brief.answers, { includeEmpty: true })
+  const md = briefToMarkdown(`${brief.title}: ${client.company || client.name}`, brief.schema, brief.answers, { includeEmpty: true })
 
   return (
     <>

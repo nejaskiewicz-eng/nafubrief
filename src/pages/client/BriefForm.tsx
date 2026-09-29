@@ -16,7 +16,7 @@ export default function BriefFormPage() {
 
   if (data === undefined) return <Loading />
   if (data === null)
-    return <Notice title="Nie znaleziono ankiety" text="Link może być niepełny lub nieaktualny. Skontaktuj się ze mną — wyślę nowy." />
+    return <Notice title="Nie znaleziono ankiety" text="Link może być niepełny lub nieaktualny. Skontaktuj się ze mną, wyślę nowy." />
   if (data.status === 'draft')
     return <Notice title="Ankieta jest jeszcze przygotowywana" text="Dopracowuję pytania specjalnie dla Ciebie. Wróć do tego linku za chwilę." />
 
@@ -150,7 +150,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
       window.scrollTo({ top: 0 })
     } catch {
       setSave('error')
-      alert('Nie udało się wysłać. Sprawdź połączenie z internetem i spróbuj ponownie — Twoje odpowiedzi są zapisane.')
+      alert('Nie udało się wysłać. Sprawdź połączenie z internetem i spróbuj ponownie. Twoje odpowiedzi są zapisane.')
     } finally {
       setSending(false)
     }
@@ -164,7 +164,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
 
   return (
     <>
-      {preview && <div className="demo-banner">Podgląd — tak ankietę zobaczy klient. Odpowiedzi nie są zapisywane.</div>}
+      {preview && <div className="demo-banner">Podgląd: tak ankietę zobaczy klient. Odpowiedzi nie są zapisywane.</div>}
       <header className="brand-band f-hero" ref={topRef}>
         <div className="wrap">
           <div>
@@ -183,7 +183,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
               {!preview && (
                 <span className={`save-state ${save}`} aria-live="polite">
                   <span className="dot" />
-                  {save === 'saving' ? 'Zapisuję…' : save === 'error' ? 'Brak połączenia — zapiszę ponownie' : 'Zapisano automatycznie'}
+                  {save === 'saving' ? 'Zapisuję…' : save === 'error' ? 'Brak połączenia, zapiszę ponownie' : 'Zapisano automatycznie'}
                 </span>
               )}
             </div>
@@ -193,7 +193,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
       </header>
 
       <main className="wrap f-body">
-        <aside>
+        <aside className="f-aside">
           <nav className="f-nav" aria-label="Części ankiety">
             <div className="f-nav-title">Części ankiety</div>
             {sections.map((s, i) => {
@@ -212,7 +212,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
           </nav>
           <div className="f-help">
             <strong>Masz pytanie?</strong>
-            <span>Zadzwoń lub napisz — chętnie pomogę.</span>
+            <span>Zadzwoń lub napisz, pomogę.</span>
             <a href={CONTACT.phoneHref}>{CONTACT.phone}</a>
             <a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a>
           </div>
@@ -229,7 +229,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
           {visibleQs.map((q) => (
             <QuestionField key={q.id} q={q} answers={answers} onChange={onChange} error={errors.has(q.id)} />
           ))}
-          {visibleQs.length === 0 && <p className="muted">W tej części nie ma pytań dla Ciebie — przejdź dalej.</p>}
+          {visibleQs.length === 0 && <p className="muted">W tej części nie ma pytań dla Ciebie. Przejdź dalej.</p>}
         </section>
       </main>
 
@@ -258,7 +258,7 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
           <div className="eyebrow">Ostatni krok</div>
           <h2 style={{ marginTop: 8 }}>Wysyłamy?</h2>
           <p className="muted">
-            Uzupełniono {progress.done} z {progress.total} pytań. Puste pola nie są problemem — omówimy je na rozmowie. Po wysłaniu odpowiedzi trafią do NAFU Design.
+            Uzupełniono {progress.done} z {progress.total} pytań. Puste pola nie są problemem, omówimy je na rozmowie. Po wysłaniu odpowiedzi trafią do NAFU Design.
           </p>
           <div className="review-list">
             {sections.map((s, i) => {
@@ -290,40 +290,97 @@ export function BriefForm({ data, token, preview }: { data: PublicBrief; token?:
 }
 
 function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () => void; preview?: boolean }) {
-  const count = data.schema.sections.reduce((n, s) => n + s.questions.length, 0)
+  const sections = data.schema.sections
+  const count = sections.reduce((n, s) => n + s.questions.length, 0)
+  const minutes = Math.max(5, Math.round((count * 0.35) / 5) * 5)
+  const words = data.title.split(' ')
+  const last = words.pop()
+  const [intro, ...rest] = (data.intro ?? '').split('\n\n')
+
   return (
     <>
-      {preview && <div className="demo-banner">Podgląd — tak ankietę zobaczy klient.</div>}
-      <div className="brand-band" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
-        <div className="wrap" style={{ paddingTop: 24 }}>
-          <div className="f-top">
-            <img src="/brand/logo-outline.webp" alt="NAFU design" className="logo" />
-            <div className="contact">
-              <a href={CONTACT.phoneHref}>{CONTACT.phone}</a>
-              <a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a>
-            </div>
+      {preview && <div className="demo-banner">Podgląd: tak ankietę zobaczy klient.</div>}
+      <div className="wl">
+        <header className="wl-top wrap">
+          <img src="/brand/logo-outline.webp" alt="NAFU design" className="logo" />
+          <div className="wl-contact">
+            <a href={CONTACT.phoneHref}>
+              <Icon name="phone" size={15} /> {CONTACT.phone}
+            </a>
+            <a href={`mailto:${CONTACT.email}`}>
+              <Icon name="mail" size={15} /> {CONTACT.email}
+            </a>
           </div>
-        </div>
-        <div className="wrap welcome" style={{ flex: 1, display: 'grid', alignItems: 'center' }}>
-          <div className="welcome-grid">
-            <div>
-              <div className="eyebrow" style={{ color: 'var(--teal)' }}>
-                Dla: {data.client_name}
-              </div>
-              <h1 style={{ marginTop: 14 }}>{data.title}</h1>
-              {data.intro && <p className="lead">{data.intro}</p>}
-              <div className="meta">
-                <span className="chip-dark">{data.schema.sections.length} części</span>
-                <span className="chip-dark">{count} pytań</span>
-                <span className="chip-dark">Zapis automatyczny — możesz wrócić w każdej chwili</span>
-              </div>
-              <button className="btn btn-primary" style={{ minHeight: 52, padding: '14px 30px', fontSize: 16 }} onClick={onStart}>
-                Zaczynamy
+        </header>
+
+        <section className="wl-hero wrap">
+          <div className="wl-copy">
+            <span className="wl-pill">
+              <span className="dot" /> Przygotowane dla: <strong>{data.client_name}</strong>
+            </span>
+            <h1>
+              {words.join(' ')} <em>{last}</em>
+            </h1>
+            {intro && <p className="wl-lead">{intro}</p>}
+            {rest.map((r, i) => (
+              <p className="wl-note" key={i}>
+                {r}
+              </p>
+            ))}
+            <div className="wl-cta">
+              <button className="btn btn-primary wl-start" onClick={onStart}>
+                Zaczynamy <span aria-hidden>→</span>
               </button>
+              <span className="wl-time">
+                <strong>ok. {minutes} min</strong>
+                <span>
+                  {sections.length} części · {count} pytań
+                </span>
+              </span>
             </div>
-            <img src="/brand/kv-desk.webp" alt="Jednorożec NAFU przy biurku projektanta" className="kv-big" />
+            <div className="wl-hosts">
+              <img src="/brand/team.webp" alt="" />
+              <span>
+                <strong>{CONTACT.names}</strong>
+                <span>NAFU Design. Jeśli coś jest niejasne, zadzwoń</span>
+              </span>
+            </div>
           </div>
-        </div>
+          <div className="wl-art" aria-hidden>
+            <div className="wl-glow" />
+            <img src="/brand/kv-desk.webp" alt="" className="wl-kv" />
+          </div>
+        </section>
+
+        <section className="wl-steps wrap" aria-label="Jak to działa">
+          <div className="wl-step">
+            <span className="n">1</span>
+            <strong>Zaznaczasz</strong>
+            <span>Większość pytań to kliknięcia. Tam, gdzie warto, piszesz własnymi słowami.</span>
+          </div>
+          <div className="wl-step">
+            <span className="n">2</span>
+            <strong>Wracasz, kiedy chcesz</strong>
+            <span>Wszystko zapisuje się samo. Możesz przerwać i dokończyć później z tego samego linku.</span>
+          </div>
+          <div className="wl-step">
+            <span className="n">3</span>
+            <strong>Wysyłasz odpowiedzi</strong>
+            <span>Czego nie wiesz, zostaw puste. Omówimy to razem na spotkaniu.</span>
+          </div>
+        </section>
+
+        <section className="wl-map wrap" aria-label="Co nas czeka">
+          <span className="wl-map-title">Co nas czeka</span>
+          <ol>
+            {sections.map((s, i) => (
+              <li key={s.id}>
+                <span>{String(i + 1).padStart(2, '0')}</span>
+                {s.title}
+              </li>
+            ))}
+          </ol>
+        </section>
       </div>
     </>
   )
@@ -346,7 +403,7 @@ function ThankYou({ data }: { data: PublicBrief }) {
             </h1>
             <p className="lead">
               Twoje odpowiedzi „{data.title}” dotarły do NAFU Design. Przeanalizujemy je i odezwiemy się z propozycjami.
-              {'\n\n'}Jeśli chcesz coś dopisać albo zmienić — po prostu zadzwoń lub napisz.
+              {'\n\n'}Jeśli chcesz coś dopisać albo zmienić, zadzwoń lub napisz.
             </p>
             <div className="row">
               <a className="btn btn-outline-light" href={CONTACT.phoneHref}>

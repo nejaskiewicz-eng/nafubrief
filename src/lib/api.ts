@@ -50,7 +50,7 @@ function load(): DemoDB {
     phone: '600 000 000',
     website: 'przyklad.pl',
     industry: 'Salon optyczny',
-    notes: 'Klient demonstracyjny — możesz go usunąć.',
+    notes: 'Klient demonstracyjny, możesz go usunąć.',
     portal_token: uuid(),
     created_at: now(),
   }
@@ -257,7 +257,7 @@ export const api = {
       const briefs = (await api.listBriefs(clientId)).filter((b) => b.status === 'submitted' || Object.keys(b.answers).length)
       return demo((db) => {
         const content = [
-          '> **Tryb demo** — to nie jest analiza AI. Po podłączeniu Supabase i klucza Anthropic agent przygotuje tu pełne podsumowanie, wnioski i konspekt pracy.',
+          '> **Tryb demo.** To nie jest analiza AI. Po podłączeniu Supabase i klucza Anthropic agent przygotuje tu pełne podsumowanie, wnioski i konspekt pracy.',
           '',
           ...briefs.map((b) => briefToMarkdown(b.title, b.schema, b.answers)),
         ].join('\n')
@@ -309,7 +309,7 @@ export const api = {
       })
     must(await sb().rpc('save_brief', { p_token: token, p_answers: answers, p_submit: submit }))
     if (submit) {
-      // powiadomienie e-mail (opcjonalne — działa, gdy skonfigurowano Resend)
+      // powiadomienie e-mail (opcjonalne - działa, gdy skonfigurowano Resend)
       fetch('/.netlify/functions/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

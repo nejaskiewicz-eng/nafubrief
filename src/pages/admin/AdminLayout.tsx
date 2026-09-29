@@ -20,11 +20,11 @@ export default function AdminLayout() {
 
   return (
     <>
-      {isDemo && <div className="demo-banner">Tryb demo — dane zapisują się tylko w tej przeglądarce. Podłącz Supabase, aby działało naprawdę (instrukcja w README).</div>}
+      {isDemo && <div className="demo-banner">Tryb demo: dane zapisują się tylko w tej przeglądarce. Podłącz Supabase, aby działało naprawdę (instrukcja w README).</div>}
       <div className="admin">
         <aside className="admin-side brand-band">
           <NavLink to="/panel">
-            <img src="/brand/logo-outline.webp" alt="NAFU design — panel" className="logo" />
+            <img src="/brand/logo-outline.webp" alt="Panel NAFU design" className="logo" />
           </NavLink>
           <nav>
             <NavLink to="/panel" end>

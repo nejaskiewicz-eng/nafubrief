@@ -1,4 +1,4 @@
-// Powiadomienie e-mail o wysłanej ankiecie (opcjonalne — działa, gdy ustawisz RESEND_API_KEY).
+// Powiadomienie e-mail o wysłanej ankiecie (opcjonalne - działa, gdy ustawisz RESEND_API_KEY).
 import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 

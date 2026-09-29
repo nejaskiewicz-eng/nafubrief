@@ -75,7 +75,7 @@ export function answerToText(q: Question, answers: Answers): string | null {
       const rows = (v as Array<Record<string, string>>).filter((row) => Object.values(row).some((x) => x?.trim()))
       return rows
         .map((row, i) =>
-          [`**${q.itemLabel ?? 'Pozycja'} ${i + 1}**`, ...(q.fields ?? []).map((f) => `  - ${f.label}: ${row[f.id]?.trim() || '—'}`)].join('\n'),
+          [`**${q.itemLabel ?? 'Pozycja'} ${i + 1}**`, ...(q.fields ?? []).map((f) => `  - ${f.label}: ${row[f.id]?.trim() || '-'}`)].join('\n'),
         )
         .join('\n')
     }
@@ -84,7 +84,7 @@ export function answerToText(q: Question, answers: Answers): string | null {
   }
 }
 
-/** Cała ankieta jako Markdown — do podglądu, kopiowania i dla agenta AI */
+/** Cała ankieta jako Markdown - do podglądu, kopiowania i dla agenta AI */
 export function briefToMarkdown(title: string, schema: SurveySchema, answers: Answers, opts: { includeEmpty?: boolean } = {}) {
   const lines: string[] = [`# ${title}`, '']
   schema.sections.forEach((s, si) => {

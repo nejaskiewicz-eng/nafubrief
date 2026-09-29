@@ -16,7 +16,7 @@ import './styles.css'
 const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/panel" replace /> },
   { path: '/login', element: <Login /> },
-  // strony klienta — dostęp przez link z tokenem
+  // strony klienta - dostęp przez link z tokenem
   { path: '/b/:token', element: <BriefFormPage /> },
   { path: '/k/:token', element: <Portal /> },
   // podglądy (pełny ekran, bez menu panelu)

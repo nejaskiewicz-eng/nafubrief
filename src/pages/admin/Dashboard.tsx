@@ -56,7 +56,7 @@ export default function Dashboard() {
           <img src="/brand/badge-arc.webp" alt="" />
           <h3>Zacznij od pierwszego klienta</h3>
           <p className="muted" style={{ margin: 0, maxWidth: 440 }}>
-            Załóż konto klienta, wybierz ankiety, sprawdź pytania — i wyślij linki.
+            Załóż konto klienta, wybierz ankiety, sprawdź pytania i wyślij linki.
           </p>
           <button className="btn btn-primary" onClick={() => setCreating(true)}>
             <Icon name="plus" /> Nowy klient
@@ -74,7 +74,7 @@ export default function Dashboard() {
                 <Link key={c.id} to={`/panel/klient/${c.id}`} className="card client-card">
                   <div>
                     <h3>{c.company || c.name}</h3>
-                    <div className="sub">{[c.company ? c.name : null, c.industry].filter(Boolean).join(' · ') || '—'}</div>
+                    <div className="sub">{[c.company ? c.name : null, c.industry].filter(Boolean).join(' · ') || '-'}</div>
                   </div>
                   <div className="progress" title={`${sub}/${c.briefs.length} wypełnionych`}>
                     <span style={{ width: `${c.briefs.length ? (sub / c.briefs.length) * 100 : 0}%` }} />
@@ -112,7 +112,7 @@ function NewClientModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     try {
       const c = await api.createClient(form, picked)
-      toast('Klient utworzony — sprawdź pytania w ankietach')
+      toast('Klient utworzony. Sprawdź pytania w ankietach')
       nav(`/panel/klient/${c.id}`)
     } catch (err) {
       toast((err as Error).message)

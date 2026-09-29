@@ -5,9 +5,9 @@ export const technical: Template = {
   key: 'technical',
   title: 'Dział techniczny',
   short: 'Techniczny',
-  description: 'Domena, hosting, poczta, obecna strona, konta i integracje — wszystko, czego potrzebuję do bezpiecznego wdrożenia.',
+  description: 'Domena, hosting, poczta, obecna strona, konta i integracje. Wszystko, czego potrzebuję do bezpiecznego wdrożenia.',
   intro:
-    'Te informacje pozwolą mi zaplanować przeniesienie strony bez przerw w działaniu i bez utraty poczty. Jeśli czegoś nie wiesz, zaznacz „nie wiem” — sprawdzimy to razem.\n\nWażne: nigdy nie wpisuj tutaj haseł. Dostępy przekażemy sobie bezpiecznie, osobno.',
+    'Te informacje pozwolą mi zaplanować przeniesienie strony bez przerw w działaniu i bez utraty poczty. Jeśli czegoś nie wiesz, zaznacz „nie wiem”, sprawdzimy to razem.\n\nWażne: nigdy nie wpisuj tutaj haseł. Dostępy przekażemy sobie bezpiecznie, osobno.',
   minutes: 10,
   accent: '#0B6E8A',
   schema: {
@@ -89,7 +89,7 @@ export const technical: Template = {
             'Tpay',
             'Stripe',
             'BLIK',
-            'Nie mam — do ustalenia',
+            'Nie mam, do ustalenia',
           ], { allowOther: true }),
           text('t4_newsletter', 'Narzędzie do newslettera lub SMS (jeśli jest)'),
           area('t4_other', 'Inne narzędzia, z którymi strona ma się łączyć'),
@@ -102,7 +102,7 @@ export const technical: Template = {
           single('t5_editor', 'Kto będzie aktualizował treści na stronie?', [
             'Ja lub mój zespół',
             'NAFU Design w ramach opieki',
-            'Razem — proste rzeczy my, większe NAFU',
+            'Razem: proste rzeczy my, większe NAFU',
           ]),
           single('t5_frequency', 'Jak często chcesz coś zmieniać lub dodawać?', [
             'Kilka razy w tygodniu',

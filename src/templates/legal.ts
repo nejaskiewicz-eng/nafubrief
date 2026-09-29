@@ -8,7 +8,7 @@ export const legal: Template = {
   description:
     'Dane do przygotowania kompletu dokumentów strony: polityki prywatności i cookies, regulaminów, klauzul RODO, zgód, deklaracji dostępności i standardów ochrony małoletnich.',
   intro:
-    'Na podstawie Twoich odpowiedzi przygotujemy dokumenty zgodne z przepisami obowiązującymi w 2026 roku (RODO, prawo konsumenckie, dyrektywa Omnibus, Europejski Akt o Dostępności, AI Act, ustawa o ochronie małoletnich). Jeśli czegoś nie wiesz — zostaw puste albo zaznacz „nie wiem”, wyjaśnimy to razem. Nie wpisuj tu haseł ani danych klientów.',
+    'Na podstawie Twoich odpowiedzi przygotujemy dokumenty zgodne z przepisami obowiązującymi w 2026 roku (RODO, prawo konsumenckie, dyrektywa Omnibus, Europejski Akt o Dostępności, AI Act, ustawa o ochronie małoletnich). Jeśli czegoś nie wiesz, zostaw puste albo zaznacz „nie wiem”, wyjaśnimy to razem. Nie wpisuj tu haseł ani danych klientów.',
   minutes: 25,
   accent: '#02AFCA',
   schema: {
@@ -40,7 +40,7 @@ export const legal: Template = {
             help: 'Imię i nazwisko lub nazwa firmy, e-mail, telefon.',
             showIf: { id: 'l1_iod', value: 'Tak' },
           }),
-          single('l1_staff', 'Liczba pracowników (łącznie ze współpracownikami na stałe)', ['0–9', '10–49', '50–249', '250 i więcej']),
+          single('l1_staff', 'Liczba pracowników (łącznie ze współpracownikami na stałe)', ['0-9', '10-49', '50-249', '250 i więcej']),
           single('l1_turnover', 'Roczny obrót lub suma bilansowa', ['Do 2 mln euro', 'Powyżej 2 mln euro', 'Wolę nie podawać'], {
             help: 'Decyduje, czy firma jest mikroprzedsiębiorcą i czy obejmuje ją obowiązek dostępności cyfrowej (Europejski Akt o Dostępności).',
           }),
@@ -50,7 +50,7 @@ export const legal: Template = {
         id: 'l2',
         title: 'Status medyczny',
         description:
-          'Dotyczy salonów optycznych, gabinetów i placówek, które badają lub leczą. Jeśli Cię nie dotyczy — przejdź dalej.',
+          'Dotyczy salonów optycznych, gabinetów i placówek, które badają lub leczą. Jeśli Cię nie dotyczy, przejdź dalej.',
         questions: [
           single('l2_rpwdl', 'Czy firma jest wpisana do RPWDL jako podmiot leczniczy?', YES_NO_DONTKNOW),
           repeater('l2_staff', 'Kto wykonuje badania?', 'Specjalista', [
@@ -87,7 +87,7 @@ export const legal: Template = {
             'Dane do faktury',
           ], { allowOther: true }),
           area('l3_when', 'Przy jakich okazjach zbierasz te dane?', {
-            help: 'Np. przy wizycie, zamówieniu, badaniu, serwisie — co dokładnie jest zapisywane w każdej sytuacji.',
+            help: 'Np. przy wizycie, zamówieniu, badaniu, serwisie. Co dokładnie jest zapisywane w każdej sytuacji.',
           }),
           multi('l3_recipients', 'Komu dane są przekazywane?', [
             'Laboratorium / pracownia (np. szlifiernia)',
@@ -105,7 +105,7 @@ export const legal: Template = {
           area('l3_recipients_names', 'Nazwy tych firm (jeśli znasz)', { help: 'Potrzebne do listy odbiorców danych w polityce prywatności.' }),
           single('l3_retention', 'Jak długo przechowujesz dane klientów, którzy nie wracają?', [
             'Do roku',
-            '2–5 lat',
+            '2-5 lat',
             'Powyżej 5 lat',
             'Bezterminowo / nie usuwamy',
             'Nie wiem',
@@ -163,11 +163,11 @@ export const legal: Template = {
             'Asystent AI / chatbot',
             'Wtyczki social media',
             'Nagrywanie sesji (Hotjar, Clarity)',
-            'Nie wiem — zdecydujmy razem',
+            'Nie wiem, zdecydujmy razem',
           ], { allowOther: true }),
           single('l4_reviews', 'Czy na stronie będą opinie klientów?', [
-            'Tak — weryfikujemy, że pochodzą od faktycznych klientów',
-            'Tak — bez weryfikacji (np. z Google)',
+            'Tak, weryfikujemy, że pochodzą od faktycznych klientów',
+            'Tak, bez weryfikacji (np. z Google)',
             'Nie',
           ], {
             help: 'Prawo wymaga informacji, czy i jak sprawdzasz, że opinie pochodzą od klientów.',
@@ -183,7 +183,7 @@ export const legal: Template = {
       },
       {
         id: 'l5',
-        title: 'Usługi — do regulaminu',
+        title: 'Usługi (do regulaminu)',
         description: 'Zasady, które trafią do regulaminu usług i będą jasne dla klientów.',
         questions: [
           area('l5_pricing', 'Cennik badania z zakupem i bez. Czy koszt badania jest odliczany od zakupu i na jakich warunkach?'),
@@ -270,7 +270,7 @@ export const legal: Template = {
           ], { allowOther: true }),
           single('l8_cookies', 'Baner zgód cookies', [
             'Proste i bezpłatne rozwiązanie',
-            'Certyfikowana platforma zgód (CMP) z Google Consent Mode v2 — potrzebna przy Google Ads',
+            'Certyfikowana platforma zgód (CMP) z Google Consent Mode v2, potrzebna przy Google Ads',
             'Zdecyduj za mnie',
           ]),
           single('l8_ai', 'Czy na stronie ma działać asystent AI / chatbot?', ['Tak', 'Może później', 'Nie'], {

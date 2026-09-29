@@ -274,7 +274,7 @@ function QuestionEditor({
           {(q.type === 'single' || q.type === 'multi') && (
             <>
               <label className="field">
-                <span className="label">Opcje — każda w nowej linii</span>
+                <span className="label">Opcje, każda w nowej linii</span>
                 <textarea className="textarea" defaultValue={(q.options ?? []).join('\n')} onBlur={(e) => onChange({ options: lines(e.target.value) })} />
               </label>
               <div className="row">
@@ -294,7 +294,7 @@ function QuestionEditor({
           {q.type === 'matrix' && (
             <>
               <label className="field">
-                <span className="label">Wiersze — każdy w nowej linii, opis po znaku „|”</span>
+                <span className="label">Wiersze, każdy w nowej linii, opis po znaku „|”</span>
                 <textarea
                   className="textarea"
                   style={{ minHeight: 160 }}
@@ -323,7 +323,7 @@ function QuestionEditor({
                 <input className="input" value={q.itemLabel ?? ''} onChange={(e) => onChange({ itemLabel: e.target.value })} />
               </label>
               <label className="field">
-                <span className="label">Pola — każde w nowej linii (dopisz „| długie” dla dłuższego pola)</span>
+                <span className="label">Pola, każde w nowej linii (dopisz „| długie” dla dłuższego pola)</span>
                 <textarea
                   className="textarea"
                   defaultValue={(q.fields ?? []).map((f) => (f.type === 'textarea' ? `${f.label} | długie` : f.label)).join('\n')}

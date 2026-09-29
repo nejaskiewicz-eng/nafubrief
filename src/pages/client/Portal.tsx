@@ -14,7 +14,7 @@ export default function Portal() {
   }, [token])
 
   if (data === undefined) return <Loading />
-  if (data === null) return <Notice title="Nie znaleziono strony" text="Link może być niepełny lub nieaktualny. Skontaktuj się ze mną — wyślę nowy." />
+  if (data === null) return <Notice title="Nie znaleziono strony" text="Link może być niepełny lub nieaktualny. Skontaktuj się ze mną, wyślę nowy." />
 
   const done = data.briefs.filter((b) => b.status === 'submitted').length
 
@@ -34,7 +34,7 @@ export default function Portal() {
           </div>
           <h1 style={{ fontSize: 'clamp(30px,4.5vw,48px)', marginTop: 10 }}>{data.client_name}</h1>
           <p style={{ color: 'rgba(255,255,255,.78)', fontWeight: 300, fontSize: 18, maxWidth: '60ch' }}>
-            Przygotowałam dla Ciebie kilka krótkich ankiet. Możesz wypełniać je w dowolnej kolejności i w kilku podejściach — wszystko zapisuje się automatycznie.
+            Przygotowałam dla Ciebie kilka krótkich ankiet. Możesz wypełniać je w dowolnej kolejności i w kilku podejściach. Wszystko zapisuje się automatycznie.
           </p>
           <p style={{ color: 'var(--teal)', fontWeight: 600, marginBottom: 0 }}>
             Wysłano {done} z {data.briefs.length}

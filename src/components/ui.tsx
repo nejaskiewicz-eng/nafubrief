@@ -134,7 +134,7 @@ export function downloadFile(name: string, content: string, type = 'text/markdow
 }
 
 export const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+  iso ? new Date(iso).toLocaleString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
 
 export const TEMPLATE_COLORS: Record<string, string> = {
   strategy: 'linear-gradient(135deg,#0a7189,#02afca)',

@@ -1,4 +1,4 @@
--- NAFU Brief — schemat bazy
+-- NAFU Brief - schemat bazy
 -- Uruchom w Supabase: SQL Editor → wklej całość → Run
 
 create extension if not exists pgcrypto;
