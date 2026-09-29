@@ -293,8 +293,6 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
   const sections = data.schema.sections
   const count = sections.reduce((n, s) => n + s.questions.length, 0)
   const minutes = Math.max(5, Math.round((count * 0.35) / 5) * 5)
-  const words = data.title.split(' ')
-  const last = words.pop()
   const [intro, ...rest] = (data.intro ?? '').split('\n\n')
 
   return (
@@ -318,8 +316,9 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
             <span className="wl-pill">
               <span className="dot" /> Przygotowane dla: <strong>{data.client_name}</strong>
             </span>
+            <div className="wl-kicker">{data.title}</div>
             <h1>
-              {words.join(' ')} <em>{last}</em>
+              Pierwszy krok do Twojej <em>nowej strony</em>
             </h1>
             {intro && <p className="wl-lead">{intro}</p>}
             {rest.map((r, i) => (

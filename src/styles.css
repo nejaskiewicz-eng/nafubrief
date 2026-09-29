@@ -2129,3 +2129,11 @@ h3 {
   padding-left: 14px;
   border-left: 2px solid rgba(2, 175, 202, 0.5);
 }
+
+.wl-kicker {
+  font: 600 13px/1 var(--font);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: -8px;
+}
