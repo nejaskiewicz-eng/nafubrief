@@ -1,42 +1,96 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { QuestionField } from '../../components/QuestionField'
 import { CONTACT, Check, Icon, Loading, Modal } from '../../components/ui'
 import { api } from '../../lib/api'
 import { isVisible, missingRequired, sectionProgress, surveyProgress } from '../../lib/format'
-import type { AnswerValue, Answers, PublicBrief } from '../../lib/types'
+import type { AnswerValue, Answers, Brief, PublicBrief } from '../../lib/types'
+import { useClientCtx } from './ClientArea'
+
+type PageState =
+  | { kind: 'loading' }
+  | { kind: 'missing' }
+  | { kind: 'draft' }
+  | { kind: 'public'; data: PublicBrief }
+  | { kind: 'fill'; data: PublicBrief; brief: Brief; email: string }
 
 export default function BriefFormPage() {
   const { client = '', brief = '' } = useParams()
-  const [data, setData] = useState<PublicBrief | null | undefined>(undefined)
+  const { session, mine } = useClientCtx()
+  const [state, setState] = useState<PageState>({ kind: 'loading' })
 
   useEffect(() => {
-    api.publicBrief(client, brief).then(setData).catch(() => setData(null))
-  }, [client, brief])
+    let alive = true
+    ;(async () => {
+      // zalogowany klient tej firmy: pełna ankieta z odpowiedziami
+      if (session && mine) {
+        const b = (await api.myBriefs(mine.id)).find((x) => x.slug === brief)
+        if (b) {
+          api.openMyBrief(b.id)
+          const data: PublicBrief = {
+            status: b.status, title: b.title, description: b.description, intro: b.intro, schema: b.schema,
+            answers: b.answers, client_name: mine.company || mine.name, submitted_at: b.submitted_at,
+          }
+          if (alive) setState({ kind: 'fill', data, brief: b, email: session.email })
+          return
+        }
+      }
+      // wszyscy pozostali: tylko podgląd pytań
+      const pub = await api.publicBrief(client, brief).catch(() => null)
+      if (!alive) return
+      if (!pub) setState({ kind: 'missing' })
+      else if (pub.status === 'draft') setState({ kind: 'draft' })
+      else setState({ kind: 'public', data: pub })
+    })()
+    return () => {
+      alive = false
+    }
+  }, [client, brief, session, mine])
 
-  if (data === undefined) return <Loading />
-  if (data === null)
+  if (state.kind === 'loading') return <Loading />
+  if (state.kind === 'missing')
     return <Notice title="Nie znaleziono ankiety" text="Link może być niepełny lub nieaktualny. Skontaktuj się ze mną, wyślę nowy." />
-  if (data.status === 'draft')
+  if (state.kind === 'draft')
     return <Notice title="Ankieta jest jeszcze przygotowywana" text="Dopracowuję pytania specjalnie dla Ciebie. Wróć do tego linku za chwilę." />
 
-  return <BriefForm data={data} token={data.token} notify={{ client, brief }} />
+  const here = `/${client}/${brief}`
+  if (state.kind === 'public') return <BriefForm data={state.data} mode="public" loginHref={`/logowanie?next=${encodeURIComponent(here)}`} backHref={`/${client}`} />
+
+  const b = state.brief
+  return (
+    <BriefForm
+      data={state.data}
+      mode="fill"
+      urgent={b.urgent && b.status !== 'submitted'}
+      backHref={`/${client}`}
+      account={<AccountBar email={state.email} />}
+      saver={{ id: b.id, save: (a, submit) => api.saveMyBrief(b.id, a, submit) }}
+    />
+  )
 }
 
 type SaveState = 'saved' | 'saving' | 'error' | 'idle'
 
 export function BriefForm({
   data,
-  token,
-  notify,
-  preview,
+  mode,
+  saver,
+  loginHref = '/logowanie',
+  backHref,
+  account,
+  urgent,
 }: {
   data: PublicBrief
-  token?: string
-  notify?: { client: string; brief: string }
-  preview?: boolean
+  urgent?: boolean
+  /** fill: zalogowany klient; public: podgląd pytań bez logowania; preview: podgląd w panelu */
+  mode: 'fill' | 'public' | 'preview'
+  saver?: { id: string; save: (answers: Answers, submit: boolean) => Promise<void> }
+  loginHref?: string
+  backHref?: string
+  account?: ReactNode
 }) {
-  const backupKey = token ? `nafu-brief-${token}` : ''
+  const preview = mode !== 'fill'
+  const backupKey = saver ? `nafu-brief-${saver.id}` : ''
   const [answers, setAnswers] = useState<Answers>(() => {
     if (backupKey) {
       try {
@@ -67,17 +121,17 @@ export function BriefForm({
 
   const persist = useCallback(
     async (a: Answers) => {
-      if (preview || !token) return
+      if (!saver) return
       setSave('saving')
       try {
-        await api.savePublicBrief(token, a)
+        await saver.save(a, false)
         dirty.current = false
         setSave('saved')
       } catch {
         setSave('error')
       }
     },
-    [preview, token],
+    [saver],
   )
 
   const answersRef = useRef(answers)
@@ -140,7 +194,7 @@ export function BriefForm({
   }
 
   const submit = async () => {
-    if (preview || !token) {
+    if (!saver) {
       setReview(false)
       setStage('done')
       return
@@ -148,7 +202,7 @@ export function BriefForm({
     setSending(true)
     clearTimeout(timer.current)
     try {
-      await api.savePublicBrief(token, answers, true, notify)
+      await saver.save(answers, true)
       try {
         localStorage.removeItem(backupKey)
       } catch {
@@ -166,23 +220,32 @@ export function BriefForm({
     }
   }
 
-  if (stage === 'welcome') return <Welcome data={data} preview={preview} onStart={() => setStage('form')} />
-  if (stage === 'done') return <ThankYou data={data} />
+  if (stage === 'welcome') return <Welcome data={data} mode={mode} loginHref={loginHref} account={account} urgent={urgent} onStart={() => setStage('form')} />
+  if (stage === 'done') return <ThankYou data={data} backHref={backHref} />
 
   const visibleQs = section.questions.filter((q) => isVisible(q, answers, schema))
   const isLast = step === sections.length - 1
 
   return (
     <>
-      {preview && <div className="demo-banner">Podgląd: tak ankietę zobaczy klient. Odpowiedzi nie są zapisywane.</div>}
+      {mode === 'preview' && <div className="demo-banner">Podgląd: tak ankietę zobaczy klient. Odpowiedzi nie są zapisywane.</div>}
+      {mode === 'public' && <PublicBanner loginHref={loginHref} />}
       <header className="brand-band f-hero" ref={topRef}>
         <div className="wrap">
           <div>
             <div className="f-top">
-              <img src="/brand/logo-outline.webp" alt="NAFU design" className="logo" />
+              {backHref ? (
+                <Link to={backHref} aria-label="Wszystkie ankiety">
+                  <img src="/brand/logo-outline.webp" alt="NAFU design" className="logo" />
+                </Link>
+              ) : (
+                <img src="/brand/logo-outline.webp" alt="NAFU design" className="logo" />
+              )}
+              {account}
             </div>
             <div className="eyebrow" style={{ color: 'var(--teal)' }}>
               Ankieta dla: {data.client_name}
+              {urgent && <span className="badge urgent" style={{ marginLeft: 12, letterSpacing: 0, textTransform: 'none' }}>Pilne</span>}
             </div>
             <h1 style={{ marginTop: 10 }}>{data.title}</h1>
             <div className="f-hero-progress">
@@ -252,9 +315,15 @@ export function BriefForm({
             {section.title} · {step + 1}/{sections.length}
           </span>
           {isLast ? (
-            <button className="btn btn-primary" onClick={trySubmit}>
-              Sprawdź i wyślij
-            </button>
+            mode === 'public' ? (
+              <Link className="btn btn-primary" to={loginHref}>
+                Zaloguj się, aby wypełnić
+              </Link>
+            ) : (
+              <button className="btn btn-primary" onClick={trySubmit}>
+                Sprawdź i wyślij
+              </button>
+            )
           ) : (
             <button className="btn btn-primary" onClick={() => go(step + 1)}>
               Dalej: {sections[step + 1].title}
@@ -299,7 +368,21 @@ export function BriefForm({
   )
 }
 
-function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () => void; preview?: boolean }) {
+function Welcome({
+  data,
+  onStart,
+  mode,
+  loginHref,
+  account,
+  urgent,
+}: {
+  data: PublicBrief
+  urgent?: boolean
+  onStart: () => void
+  mode: 'fill' | 'public' | 'preview'
+  loginHref: string
+  account?: ReactNode
+}) {
   const sections = data.schema.sections
   const count = sections.reduce((n, s) => n + s.questions.length, 0)
   const minutes = Math.max(5, Math.round((count * 0.35) / 5) * 5)
@@ -307,18 +390,20 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
 
   return (
     <>
-      {preview && <div className="demo-banner">Podgląd: tak ankietę zobaczy klient.</div>}
+      {mode === 'preview' && <div className="demo-banner">Podgląd: tak ankietę zobaczy klient.</div>}
       <div className="wl">
         <header className="wl-top wrap">
           <img src="/brand/logo-outline.webp" alt="NAFU design" className="logo" />
-          <div className="wl-contact">
-            <a href={CONTACT.phoneHref}>
-              <Icon name="phone" size={15} /> {CONTACT.phone}
-            </a>
-            <a href={`mailto:${CONTACT.email}`}>
-              <Icon name="mail" size={15} /> {CONTACT.email}
-            </a>
-          </div>
+          {account ?? (
+            <div className="wl-contact">
+              <a href={CONTACT.phoneHref}>
+                <Icon name="phone" size={15} /> {CONTACT.phone}
+              </a>
+              <a href={`mailto:${CONTACT.email}`}>
+                <Icon name="mail" size={15} /> {CONTACT.email}
+              </a>
+            </div>
+          )}
         </header>
 
         <section className="wl-hero wrap">
@@ -326,6 +411,11 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
             <span className="wl-pill">
               <span className="dot" /> Przygotowane dla: <strong>{data.client_name}</strong>
             </span>
+            {urgent && (
+              <span className="wl-urgent">
+                Pilne: ta ankieta jest mi potrzebna jak najszybciej. Dziękuję, że wypełnisz ją w pierwszej kolejności.
+              </span>
+            )}
             <div className="wl-kicker">{data.title}</div>
             <h1>
               Pierwszy krok do Twojej <em>nowej strony</em>
@@ -337,9 +427,20 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
               </p>
             ))}
             <div className="wl-cta">
-              <button className="btn btn-primary wl-start" onClick={onStart}>
-                Zaczynamy <span aria-hidden>→</span>
-              </button>
+              {mode === 'public' ? (
+                <>
+                  <Link className="btn btn-primary wl-start" to={loginHref}>
+                    Zaloguj się, aby wypełnić <span aria-hidden>→</span>
+                  </Link>
+                  <button className="btn btn-outline-light" onClick={onStart}>
+                    Zobacz pytania
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-primary wl-start" onClick={onStart}>
+                  Zaczynamy <span aria-hidden>→</span>
+                </button>
+              )}
               <span className="wl-time">
                 <strong>ok. {minutes} min</strong>
                 <span>
@@ -370,7 +471,7 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
           <div className="wl-step">
             <span className="n">2</span>
             <strong>Wracasz, kiedy chcesz</strong>
-            <span>Wszystko zapisuje się samo. Możesz przerwać i dokończyć później z tego samego linku.</span>
+            <span>Wszystko zapisuje się samo na Twoim koncie. Możesz przerwać i dokończyć później.</span>
           </div>
           <div className="wl-step">
             <span className="n">3</span>
@@ -395,7 +496,7 @@ function Welcome({ data, onStart, preview }: { data: PublicBrief; onStart: () =>
   )
 }
 
-function ThankYou({ data }: { data: PublicBrief }) {
+function ThankYou({ data, backHref }: { data: PublicBrief; backHref?: string }) {
   return (
     <div className="brand-band" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       <div className="wrap" style={{ paddingTop: 24 }}>
@@ -415,6 +516,11 @@ function ThankYou({ data }: { data: PublicBrief }) {
               {'\n\n'}Jeśli chcesz coś dopisać albo zmienić, zadzwoń lub napisz.
             </p>
             <div className="row">
+              {backHref && (
+                <Link className="btn btn-primary" to={backHref}>
+                  Pozostałe ankiety
+                </Link>
+              )}
               <a className="btn btn-outline-light" href={CONTACT.phoneHref}>
                 <Icon name="phone" size={16} /> {CONTACT.phone}
               </a>
@@ -449,6 +555,90 @@ export function Notice({ title, text }: { title: string; text: string }) {
           </a>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Pasek nad ankietą bez logowania: to tylko podgląd pytań */
+export function PublicBanner({ loginHref }: { loginHref: string }) {
+  return (
+    <div className="pub-banner">
+      <span>Podgląd pytań. Aby wypełnić ankietę i zapisać odpowiedzi, zaloguj się na swoje konto.</span>
+      <Link className="btn btn-primary btn-sm" to={loginHref}>
+        Zaloguj się
+      </Link>
+    </div>
+  )
+}
+
+/** Zalogowany klient: e-mail, zmiana hasła, wylogowanie */
+export function AccountBar({ email }: { email: string }) {
+  const nav = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [pw, setPw] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const change = async () => {
+    if (pw.length < 8) return setMsg('Hasło musi mieć co najmniej 8 znaków.')
+    if (pw !== pw2) return setMsg('Hasła nie są takie same.')
+    setBusy(true)
+    try {
+      await api.changePassword(pw)
+      setOpen(false)
+      setPw('')
+      setPw2('')
+      setMsg('')
+    } catch (e) {
+      setMsg((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="acct">
+      <span className="acct-email" title={email}>
+        {email}
+      </span>
+      <button className="btn btn-outline-light btn-sm" onClick={() => setOpen(true)}>
+        Zmień hasło
+      </button>
+      <button
+        className="btn btn-outline-light btn-sm"
+        onClick={async () => {
+          await api.signOut()
+          nav('/logowanie')
+        }}
+      >
+        <Icon name="logout" size={14} /> Wyloguj
+      </button>
+      {open && (
+        <Modal label="Zmień hasło" onClose={() => setOpen(false)}>
+          <div className="eyebrow">Twoje konto</div>
+          <h2 style={{ marginTop: 8, marginBottom: 16 }}>Zmień hasło</h2>
+          <div className="stack">
+            <label className="field">
+              <span className="label">Nowe hasło (co najmniej 8 znaków)</span>
+              <input className="input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="label">Powtórz nowe hasło</span>
+              <input className="input" type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+            </label>
+            {msg && <p style={{ color: 'var(--danger)', margin: 0 }}>{msg}</p>}
+          </div>
+          <div className="modal-actions">
+            <button className="btn" onClick={() => setOpen(false)}>
+              Anuluj
+            </button>
+            <button className="btn btn-primary" onClick={change} disabled={busy}>
+              {busy ? 'Zapisuję…' : 'Zapisz hasło'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

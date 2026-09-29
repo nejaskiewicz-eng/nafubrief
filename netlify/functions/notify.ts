@@ -1,4 +1,5 @@
-// Powiadomienie e-mail o wysłanej ankiecie (opcjonalne - działa, gdy ustawisz RESEND_API_KEY).
+// Powiadomienie e-mail o wysłanej ankiecie (opcjonalne, działa, gdy ustawisz RESEND_API_KEY).
+// Wywołuje zalogowany klient zaraz po wysłaniu ankiety.
 import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 
@@ -11,16 +12,20 @@ export const handler: Handler = async (event) => {
   const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
   if (!key || !from || !url || !anon) return { statusCode: 204, body: '' }
 
-  const { client, brief } = JSON.parse(event.body || '{}') as { client?: string; brief?: string }
-  const ok = (v?: string) => !!v && /^[a-z0-9-]{1,80}$/.test(v)
-  if (!ok(client) || !ok(brief)) return { statusCode: 400, body: '' }
+  const token = (event.headers.authorization || '').replace(/^Bearer\s+/i, '')
+  const { briefId } = JSON.parse(event.body || '{}') as { briefId?: string }
+  if (!token || !briefId || !/^[0-9a-f-]{36}$/i.test(briefId)) return { statusCode: 400, body: '' }
 
-  // Sprawdzamy przez publiczną funkcję, że ankieta faktycznie została właśnie wysłana.
-  const db = createClient(url, anon)
-  const { data } = await db.rpc('get_brief_by_slug', { p_client: client, p_brief: brief })
-  const b = data as { status: string; title: string; client_name: string; submitted_at: string | null } | null
+  // Odczyt jako zalogowany klient: RLS pokaże tylko jego własną ankietę.
+  const db = createClient(url, anon, { global: { headers: { Authorization: `Bearer ${token}` } } })
+  const { data: b } = await db
+    .from('briefs')
+    .select('title, status, submitted_at, clients(name, company)')
+    .eq('id', briefId)
+    .single<{ title: string; status: string; submitted_at: string | null; clients: { name: string; company: string | null } | null }>()
   if (!b || b.status !== 'submitted' || !b.submitted_at) return { statusCode: 204, body: '' }
   if (Date.now() - new Date(b.submitted_at).getTime() > 5 * 60 * 1000) return { statusCode: 204, body: '' }
+  const clientName = b.clients?.company || b.clients?.name || 'Klient'
 
   const site = process.env.URL || ''
   const res = await fetch('https://api.resend.com/emails', {
@@ -29,8 +34,8 @@ export const handler: Handler = async (event) => {
     body: JSON.stringify({
       from,
       to,
-      subject: `✔ ${b.client_name} wysłał(a) ankietę: ${b.title}`,
-      html: `<p><strong>${escape(b.client_name)}</strong> wypełnił(a) ankietę <strong>${escape(b.title)}</strong>.</p><p><a href="${site}/panel">Otwórz panel NAFU Brief</a></p>`,
+      subject: `${clientName} wysłał(a) ankietę: ${b.title}`,
+      html: `<p><strong>${escape(clientName)}</strong> wypełnił(a) ankietę <strong>${escape(b.title)}</strong>.</p><p><a href="${site}/panel">Otwórz panel NAFU Brief</a></p>`,
     }),
   })
   return { statusCode: res.ok ? 200 : 502, body: '' }

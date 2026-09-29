@@ -4,19 +4,41 @@ import {
   CONTACT, Icon, Modal, Spinner, StatusBadge, TEMPLATE_COLORS, TEMPLATE_LETTER,
   copyText, downloadFile, fmtDate, useToast,
 } from '../../components/ui'
-import { api, briefLink, portalLink, type ClientInput } from '../../lib/api'
+import { api, briefLink, loginLink, portalLink, type ClientInput } from '../../lib/api'
 import { surveyProgress } from '../../lib/format'
 import { renderMarkdown } from '../../lib/markdown'
 import type { Brief, Client, Summary, TemplateKey } from '../../lib/types'
 import { TemplatePicker } from './Dashboard'
+import { isDemo } from '../../lib/supabase'
+import { unreadCount } from '../../lib/workspace'
+import Media from '../../workspace/Media'
+import Messages from '../../workspace/Messages'
+import Profile from '../../workspace/Profile'
+import Services from '../../workspace/Services'
+import Team from '../../workspace/Team'
 
-type Tab = 'briefs' | 'ai' | 'data'
+type Tab = 'briefs' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'wiadomosci' | 'ai' | 'data'
+
+const TAB_LABELS: Array<[Tab, string]> = [
+  ['briefs', 'Ankiety i linki'],
+  ['profil', 'Profil firmy'],
+  ['media', 'Baza mediów'],
+  ['zespol', 'Zespół'],
+  ['uslugi', 'Usługi'],
+  ['wiadomosci', 'Wiadomości'],
+  ['ai', 'Podsumowanie AI'],
+  ['data', 'Dane klienta'],
+]
 
 export default function ClientDetail() {
   const { id = '' } = useParams()
   const [client, setClient] = useState<Client | null>(null)
   const [briefs, setBriefs] = useState<Brief[] | null>(null)
   const [tab, setTab] = useState<Tab>('briefs')
+  const [unread, setUnread] = useState(0)
+  useEffect(() => {
+    if (!isDemo) unreadCount(id, true).then(setUnread).catch(() => {})
+  }, [id, tab])
 
   const reload = useCallback(async () => {
     const [c, b] = await Promise.all([api.getClient(id), api.listBriefs(id)])
@@ -55,18 +77,20 @@ export default function ClientDetail() {
       </div>
 
       <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'briefs'} className={tab === 'briefs' ? 'on' : ''} onClick={() => setTab('briefs')}>
-          Ankiety i linki
-        </button>
-        <button role="tab" aria-selected={tab === 'ai'} className={tab === 'ai' ? 'on' : ''} onClick={() => setTab('ai')}>
-          Podsumowanie AI
-        </button>
-        <button role="tab" aria-selected={tab === 'data'} className={tab === 'data' ? 'on' : ''} onClick={() => setTab('data')}>
-          Dane klienta
-        </button>
+        {TAB_LABELS.map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+            {label}
+            {k === 'wiadomosci' && unread > 0 && <span className="tab-dot">{unread}</span>}
+          </button>
+        ))}
       </div>
 
       {tab === 'briefs' && <BriefsTab client={client} briefs={briefs} reload={reload} />}
+      {tab === 'profil' && <Profile clientId={client.id} />}
+      {tab === 'media' && <Media clientId={client.id} />}
+      {tab === 'zespol' && <Team clientId={client.id} />}
+      {tab === 'uslugi' && <Services clientId={client.id} />}
+      {tab === 'wiadomosci' && <Messages clientId={client.id} isAdmin />}
       {tab === 'ai' && <AiTab client={client} briefs={briefs} />}
       {tab === 'data' && <DataTab client={client} onSaved={reload} />}
     </>
@@ -79,6 +103,8 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
   const toast = useToast()
   const [adding, setAdding] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [access, setAccess] = useState<null | 'create' | 'password'>(null)
+  const [creds, setCreds] = useState<{ email: string; password: string } | null>(null)
   const drafts = briefs.filter((b) => b.status === 'draft')
   const live = briefs.filter((b) => b.status !== 'draft')
 
@@ -122,6 +148,47 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
 
       <aside className="stack">
         <div className="card" style={{ padding: 20 }}>
+          <div className="eyebrow">Dostęp klienta</div>
+          <h3 style={{ fontSize: 20, margin: '8px 0 6px', color: 'var(--ink)' }}>Konto do wypełniania ankiet</h3>
+          {client.user_id ? (
+            <>
+              <p className="muted" style={{ fontSize: 14, marginTop: 0 }}>
+                Klient loguje się adresem <strong style={{ color: 'var(--ink)' }}>{client.login_email}</strong> i widzi tylko swoje ankiety.
+              </p>
+              <div className="row">
+                <button className="btn btn-sm" onClick={() => setAccess('password')}>
+                  <Icon name="unlock" size={15} /> Nowe hasło
+                </button>
+                <button
+                  className="btn btn-sm btn-danger"
+                  onClick={async () => {
+                    if (!confirm('Usunąć konto klienta? Nie będzie mógł się zalogować. Odpowiedzi zostaną w panelu.')) return
+                    try {
+                      await api.clientAccess('remove', client.id)
+                      await reload()
+                      toast('Usunięto dostęp klienta')
+                    } catch (e) {
+                      toast((e as Error).message)
+                    }
+                  }}
+                >
+                  <Icon name="trash" size={15} /> Usuń dostęp
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="muted" style={{ fontSize: 14, marginTop: 0 }}>
+                Bez konta klient może tylko przejrzeć pytania. Załóż mu konto, żeby mógł je wypełnić i zapisać odpowiedzi.
+              </p>
+              <button className="btn btn-primary btn-sm" onClick={() => setAccess('create')}>
+                <Icon name="plus" size={15} /> Załóż konto klienta
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: 20 }}>
           <div className="eyebrow">{drafts.length ? 'Krok 2 z 2' : 'Wysyłka'}</div>
           <h3 style={{ fontSize: 20, margin: '8px 0 6px', color: 'var(--ink)' }}>Link dla klienta</h3>
           <p className="muted" style={{ fontSize: 14, marginTop: 0 }}>
@@ -160,7 +227,30 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
           }}
         />
       )}
-      {sharing && <ShareModal client={client} briefs={live} onClose={() => setSharing(false)} />}
+      {access && (
+        <AccessModal
+          client={client}
+          mode={access}
+          onClose={() => setAccess(null)}
+          onDone={async (c) => {
+            await reload()
+            setAccess(null)
+            setCreds(c)
+            setSharing(true)
+          }}
+        />
+      )}
+      {sharing && (
+        <ShareModal
+          client={client}
+          briefs={live}
+          creds={creds}
+          onClose={() => {
+            setSharing(false)
+            setCreds(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -170,13 +260,14 @@ function BriefRow({ b, client, reload }: { b: Brief; client: Client; reload: () 
   const p = surveyProgress(b.schema, b.answers)
   const qs = b.schema.sections.reduce((n, s) => n + s.questions.length, 0)
   return (
-    <div className="brief-row">
+    <div className={`brief-row${b.urgent && b.status !== 'submitted' ? ' is-urgent' : ''}`}>
       <div className="brief-icon" style={{ background: TEMPLATE_COLORS[b.template_key] ?? TEMPLATE_COLORS.strategy }}>
         {TEMPLATE_LETTER[b.template_key] ?? '•'}
       </div>
       <div style={{ minWidth: 0 }}>
         <h3>{b.title}</h3>
         <div className="meta">
+          {b.urgent && <span className="badge urgent">Pilne</span>}
           <StatusBadge status={b.status} />
           <span>
             {b.schema.sections.length} części · {qs} pytań
@@ -206,6 +297,20 @@ function BriefRow({ b, client, reload }: { b: Brief; client: Client; reload: () 
         {b.status !== 'draft' && (
           <button className="btn btn-sm" title="Kopiuj link do tej ankiety" onClick={() => copyText(briefLink(client, b)).then(() => toast('Skopiowano link do ankiety'))}>
             <Icon name="link" size={15} /> Link
+          </button>
+        )}
+        {b.status !== 'submitted' && (
+          <button
+            className={`btn btn-sm${b.urgent ? ' btn-urgent' : ''}`}
+            aria-pressed={b.urgent}
+            title="Klient zobaczy tę ankietę jako pilną, na górze listy"
+            onClick={async () => {
+              await api.updateBrief(b.id, { urgent: !b.urgent })
+              await reload()
+              toast(b.urgent ? 'Zdjęto oznaczenie „Pilne”' : 'Oznaczono jako pilną')
+            }}
+          >
+            {b.urgent ? '● Pilne' : 'Oznacz jako pilną'}
           </button>
         )}
         {b.status === 'submitted' && (
@@ -265,17 +370,27 @@ function AddBriefsModal({ existing, onClose, onAdd }: { existing: TemplateKey[];
   )
 }
 
-function ShareModal({ client, briefs, onClose }: { client: Client; briefs: Brief[]; onClose: () => void }) {
+function ShareModal({ client, briefs, creds, onClose }: { client: Client; briefs: Brief[]; creds: { email: string; password: string } | null; onClose: () => void }) {
   const toast = useToast()
   const first = client.name.split(' ')[0]
+  const login = creds
+    ? `Założyłam dla Ciebie konto, na którym wypełnisz ankiety:
+Adres logowania: ${loginLink()}
+E-mail: ${creds.email}
+Hasło: ${creds.password}
+Po zalogowaniu możesz zmienić hasło na własne.`
+    : client.login_email
+      ? `Zaloguj się na swoje konto: ${loginLink()}
+E-mail: ${client.login_email}`
+      : ''
   const message = `Dzień dobry${first ? ` ${first}` : ''},
 
-przygotowałam dla Ciebie krótki brief do projektu strony. Wszystkie ankiety znajdziesz pod jednym linkiem:
+przygotowałam dla Ciebie krótki brief do projektu strony. Wszystkie ankiety znajdziesz tutaj:
 ${portalLink(client)}
 
 ${briefs.map((b) => `• ${b.title}: ${briefLink(client, b)}`).join('\n')}
-
-Możesz wypełniać je w kilku podejściach, odpowiedzi zapisują się automatycznie. Jeśli czegoś nie wiesz, zostaw puste, omówimy to razem.
+${login ? `\n${login}\n` : ''}
+Możesz wypełniać ankiety w kilku podejściach, odpowiedzi zapisują się automatycznie. Jeśli czegoś nie wiesz, zostaw puste, omówimy to razem.
 
 W razie pytań jestem pod telefonem ${CONTACT.phone} i mailem ${CONTACT.email}.
 
@@ -289,6 +404,16 @@ NAFU Design`
       <div className="eyebrow">Wysyłka</div>
       <h2 style={{ marginTop: 8 }}>Wiadomość z linkami</h2>
       <p className="muted" style={{ marginTop: 4 }}>Skopiuj i wyślij e-mailem, SMS-em lub w komunikatorze.</p>
+      {creds && (
+        <p className="card" style={{ padding: '10px 14px', background: 'var(--warn-50)', borderColor: '#f4e0b4', fontSize: 14, margin: '0 0 12px' }}>
+          Hasło widzisz tylko teraz, nie jest nigdzie zapisane. Skopiuj wiadomość przed zamknięciem okna.
+        </p>
+      )}
+      {!client.user_id && (
+        <p className="card" style={{ padding: '10px 14px', background: 'var(--warn-50)', borderColor: '#f4e0b4', fontSize: 14, margin: '0 0 12px' }}>
+          Klient nie ma jeszcze konta, więc może tylko przejrzeć pytania. Załóż mu konto w sekcji „Dostęp klienta”.
+        </p>
+      )}
       <textarea className="textarea" style={{ minHeight: 300, fontSize: 14 }} defaultValue={message} id="share-msg" />
       <div className="modal-actions">
         {client.email && (
@@ -496,5 +621,82 @@ function DataTab({ client, onSaved }: { client: Client; onSaved: () => Promise<v
         </div>
       </form>
     </div>
+  )
+}
+
+const PW_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
+const genPassword = () => {
+  const r = crypto.getRandomValues(new Uint8Array(10))
+  const c = Array.from(r, (b) => PW_ALPHABET[b % PW_ALPHABET.length]).join('')
+  return `${c.slice(0, 5)}-${c.slice(5)}`
+}
+
+function AccessModal({
+  client,
+  mode,
+  onClose,
+  onDone,
+}: {
+  client: Client
+  mode: 'create' | 'password'
+  onClose: () => void
+  onDone: (creds: { email: string; password: string }) => Promise<void>
+}) {
+  const [email, setEmail] = useState(client.login_email ?? client.email ?? '')
+  const [password, setPassword] = useState(genPassword)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api.clientAccess(mode, client.id, email, password)
+      await onDone({ email: mode === 'create' ? email.trim().toLowerCase() : client.login_email ?? email, password })
+    } catch (err) {
+      setError((err as Error).message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal label={mode === 'create' ? 'Załóż konto klienta' : 'Nowe hasło'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="eyebrow">Dostęp klienta</div>
+        <h2 style={{ marginTop: 8 }}>{mode === 'create' ? 'Załóż konto klienta' : 'Ustaw nowe hasło'}</h2>
+        <p className="muted" style={{ marginTop: 4 }}>
+          {mode === 'create'
+            ? 'Klient będzie logował się tym adresem e-mail i hasłem. Po zapisaniu przygotuję gotową wiadomość z danymi logowania.'
+            : `Nowe hasło dla ${client.login_email}. Poprzednie przestanie działać.`}
+        </p>
+        <div className="stack" style={{ marginTop: 16 }}>
+          {mode === 'create' && (
+            <label className="field">
+              <span className="label">E-mail klienta (login)</span>
+              <input className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+          )}
+          <label className="field">
+            <span className="label">Hasło (co najmniej 8 znaków)</span>
+            <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <input className="input" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} style={{ fontFamily: 'ui-monospace, Menlo, monospace' }} />
+              <button type="button" className="btn btn-sm" onClick={() => setPassword(genPassword())}>
+                Losuj
+              </button>
+            </div>
+          </label>
+          {error && <p style={{ color: 'var(--danger)', margin: 0 }}>{error}</p>}
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose}>
+            Anuluj
+          </button>
+          <button className="btn btn-primary" disabled={busy}>
+            {busy ? 'Zapisuję…' : mode === 'create' ? 'Załóż konto' : 'Ustaw hasło'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }

@@ -84,8 +84,11 @@ export interface Client {
   industry: string | null
   notes: string | null
   portal_token: string
-  /** krótki adres, np. optyka-perfect-hg98 */
+  /** krótki adres, np. optyka-perfect */
   slug: string
+  /** konto klienta (logowanie do ankiet) */
+  user_id: string | null
+  login_email: string | null
   created_at: string
 }
 
@@ -103,6 +106,8 @@ export interface Brief {
   /** krótka nazwa w adresie, np. prawny */
   slug: string
   position: number
+  /** pilna: klient widzi ją wyróżnioną i na górze listy */
+  urgent: boolean
   opened_at: string | null
   submitted_at: string | null
   created_at: string
@@ -129,8 +134,6 @@ export interface PublicBrief {
   answers: Answers
   client_name: string
   submitted_at: string | null
-  /** do zapisu odpowiedzi; zwracany przy wejściu przez krótki adres */
-  token?: string
 }
 
 export interface PublicPortal {
@@ -139,8 +142,6 @@ export interface PublicPortal {
   briefs: Array<{
     title: string
     description: string | null
-    status: BriefStatus
-    token: string
     slug: string
     template_key: string
   }>

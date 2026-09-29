@@ -28,7 +28,7 @@ Bez pliku `.env` aplikacja działa w **trybie demo** (dane w przeglądarce, logo
 ### 1. Supabase
 
 1. Załóż projekt na [supabase.com](https://supabase.com) (region: Frankfurt / EU - dane klientów zostają w UE).
-2. **SQL Editor** → wklej po kolei pliki z `supabase/migrations/` (`001_init.sql`, potem `002_short_links.sql`) → **Run**.
+2. **SQL Editor** → wklej po kolei wszystkie pliki z `supabase/migrations/` (od `001` do `004`) → **Run**.
 3. **Authentication → Users → Add user**: Twój e-mail i hasło (to konto do panelu).
 4. **Authentication → Sign In / Providers**: wyłącz **Allow new users to sign up** - tylko Ty masz konto.
 5. **Project Settings → API**: skopiuj *Project URL* i *publishable / anon key*.
@@ -52,6 +52,7 @@ git push -u origin main
 | `SUPABASE_URL` | to samo co wyżej |
 | `SUPABASE_ANON_KEY` | to samo co wyżej |
 | `VITE_SITE_URL` | `https://nafu-design.com` (od tego adresu zaczynają się linki do ankiet) |
+| `SUPABASE_SECRET_KEY` | klucz **secret** z Supabase (Project Settings → API Keys). Potrzebny do zakładania kont klientów. Tylko w Netlify, nigdy w kodzie. |
 | `ANTHROPIC_API_KEY` | klucz z [platform.claude.com](https://platform.claude.com) |
 | `RESEND_API_KEY` *(opcjonalnie)* | klucz Resend - powiadomienia e-mail o wysłanej ankiecie |
 | `NOTIFY_EMAIL` *(opcjonalnie)* | gdzie wysyłać powiadomienia (domyślnie n.e.jaskiewicz@gmail.com) |

@@ -3,7 +3,8 @@ import { briefToMarkdown } from './format'
 import { isDemo, supabase } from './supabase'
 import type { Answers, Brief, Client, PublicBrief, PublicPortal, Summary, TemplateKey } from './types'
 
-export type ClientInput = Partial<Omit<Client, 'id' | 'portal_token' | 'slug' | 'created_at'>> & { name: string }
+export type ClientInput = Partial<Omit<Client, 'id' | 'portal_token' | 'slug' | 'user_id' | 'login_email' | 'created_at'>> & { name: string }
+export type Session = { email: string; role: 'admin' | 'client'; mustChangePassword?: boolean }
 export type ClientWithBriefs = Client & { briefs: Pick<Brief, 'id' | 'title' | 'status' | 'template_key' | 'submitted_at'>[] }
 
 const clone = <T,>(x: T): T => (x === undefined ? x : JSON.parse(JSON.stringify(x)))
@@ -35,8 +36,12 @@ const DEMO_KEY = 'nafu-brief-demo'
 const BRIEF_SLUG: Record<string, string> = { strategy: 'strategia', legal: 'prawny', technical: 'techniczny', visual: 'wizualny' }
 const slugify = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
-const code = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('')
-const clientSlug = (c: { company?: string | null; name: string }) => `${slugify(c.company || c.name) || 'klient'}-${code()}`
+function clientSlug(db: DemoDB, c: { company?: string | null; name: string }, selfId?: string) {
+  const base = slugify(c.company || c.name) || 'klient'
+  let s = base
+  for (let n = 2; db.clients.some((x) => x.slug === s && x.id !== selfId); n++) s = `${base}-${n}`
+  return s
+}
 function briefSlug(db: DemoDB, clientId: string, key: string) {
   const base = BRIEF_SLUG[key] ?? key
   let s = base
@@ -51,7 +56,11 @@ function load(): DemoDB {
     const raw = localStorage.getItem(DEMO_KEY)
     if (raw) {
       const db = JSON.parse(raw) as DemoDB
-      db.clients.forEach((c) => (c.slug ??= clientSlug(c)))
+      db.clients.forEach((c) => {
+        c.slug ??= clientSlug(db, c, c.id)
+        c.user_id ??= null
+        c.login_email ??= null
+      })
       db.briefs.forEach((b) => (b.slug ??= briefSlug(db, b.client_id, b.template_key)))
       return db
     }
@@ -68,7 +77,9 @@ function load(): DemoDB {
     industry: 'Salon optyczny',
     notes: 'Klient demonstracyjny, możesz go usunąć.',
     portal_token: uuid(),
-    slug: clientSlug({ company: 'Salon Optyczny Przykład', name: '' }),
+    slug: 'salon-optyczny-przyklad',
+    user_id: 'demo-client',
+    login_email: 'anna@przyklad.pl',
     created_at: now(),
   }
   const db: DemoDB = { clients: [client], briefs: [], summaries: [] }
@@ -79,6 +90,7 @@ function load(): DemoDB {
       client_id: client.id,
       answers: {},
       status: 'sent',
+      urgent: k === 'legal',
       token: uuid(),
       slug: BRIEF_SLUG[k],
       opened_at: null,
@@ -117,22 +129,40 @@ const sb = () => supabase!
 
 export const api = {
   /* ---------- logowanie ---------- */
-  async session() {
-    if (isDemo) return sessionStorage.getItem('nafu-demo-auth') ? { email: 'demo' } : null
-    const { data } = await sb().auth.getSession()
-    return data.session ? { email: data.session.user.email ?? '' } : null
-  },
-  async signIn(email: string, password: string) {
+  /** Zalogowana osoba i jej rola: administratorka (panel) albo klient (ankiety) */
+  async session(): Promise<Session | null> {
     if (isDemo) {
-      sessionStorage.setItem('nafu-demo-auth', '1')
+      const r = sessionStorage.getItem('nafu-demo-auth')
+      return r ? { email: r === 'client' ? 'anna@przyklad.pl' : 'demo', role: r === 'client' ? 'client' : 'admin' } : null
+    }
+    const { data } = await sb().auth.getSession()
+    if (!data.session) return null
+    const { data: isAdmin } = await sb().rpc('is_admin')
+    // świeży odczyt metadanych (flaga wymuszonej zmiany hasła)
+    const { data: u } = await sb().auth.getUser()
+    const user = u.user ?? data.session.user
+    return {
+      email: user.email ?? '',
+      role: isAdmin ? 'admin' : 'client',
+      mustChangePassword: !isAdmin && user.user_metadata?.must_change_password === true,
+    }
+  },
+  async signIn(email: string, password: string, demoRole: 'admin' | 'client' = 'admin') {
+    if (isDemo) {
+      sessionStorage.setItem('nafu-demo-auth', demoRole)
       return
     }
-    const { error } = await sb().auth.signInWithPassword({ email, password })
+    const { error } = await sb().auth.signInWithPassword({ email: email.trim(), password })
     if (error) throw new Error(error.message === 'Invalid login credentials' ? 'Nieprawidłowy e-mail lub hasło.' : error.message)
   },
   async signOut() {
     if (isDemo) return sessionStorage.removeItem('nafu-demo-auth')
     await sb().auth.signOut()
+  },
+  async changePassword(password: string) {
+    if (isDemo) return
+    const { error } = await sb().auth.updateUser({ password, data: { must_change_password: false } })
+    if (error) throw new Error(error.message)
   },
 
   /* ---------- klienci ---------- */
@@ -164,12 +194,12 @@ export const api = {
       return demo((db) => {
         const c: Client = {
           company: null, email: null, phone: null, website: null, industry: null, notes: null,
-          ...input, id: uuid(), portal_token: uuid(), slug: clientSlug(input), created_at: now(),
+          ...input, id: uuid(), portal_token: uuid(), slug: clientSlug(db, input), user_id: null, login_email: null, created_at: now(),
         }
         db.clients.push(c)
         templates.forEach((k, i) =>
           db.briefs.push({
-            ...newBriefFromTemplate(k, i), id: uuid(), client_id: c.id, answers: {}, status: 'draft',
+            ...newBriefFromTemplate(k, i), id: uuid(), client_id: c.id, answers: {}, status: 'draft', urgent: false,
             token: uuid(), slug: briefSlug(db, c.id, k), opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
@@ -196,6 +226,30 @@ export const api = {
     must(await sb().from('clients').delete().eq('id', id))
   },
 
+  /** Konto klienta: utworzenie, nowe hasło, usunięcie dostępu */
+  async clientAccess(action: 'create' | 'password' | 'remove', clientId: string, email?: string, password?: string) {
+    if (isDemo)
+      return demo((db) => {
+        const c = db.clients.find((x) => x.id === clientId)!
+        if (action === 'create') {
+          c.user_id = uuid()
+          c.login_email = email ?? null
+        }
+        if (action === 'remove') {
+          c.user_id = null
+          c.login_email = null
+        }
+      })
+    const { data } = await sb().auth.getSession()
+    const res = await fetch('/.netlify/functions/client-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+      body: JSON.stringify({ action, clientId, email, password }),
+    })
+    const out = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) throw new Error(out.error ?? `Błąd ${res.status}`)
+  },
+
   /* ---------- ankiety klienta ---------- */
   async listBriefs(clientId: string): Promise<Brief[]> {
     if (isDemo)
@@ -218,14 +272,14 @@ export const api = {
       return demo((db) => {
         rows.forEach((r) =>
           db.briefs.push({
-            ...r, id: uuid(), answers: {}, status: 'draft', token: uuid(), slug: briefSlug(db, clientId, r.template_key),
+            ...r, id: uuid(), answers: {}, status: 'draft', urgent: false, token: uuid(), slug: briefSlug(db, clientId, r.template_key),
             opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
       })
     must(await sb().from('briefs').insert(rows))
   },
-  async updateBrief(id: string, patch: Partial<Pick<Brief, 'title' | 'description' | 'intro' | 'schema' | 'status' | 'position' | 'answers' | 'submitted_at'>>) {
+  async updateBrief(id: string, patch: Partial<Pick<Brief, 'title' | 'description' | 'intro' | 'schema' | 'status' | 'position' | 'answers' | 'submitted_at' | 'urgent'>>) {
     if (isDemo)
       return demo((db) => {
         Object.assign(db.briefs.find((x) => x.id === id)!, patch, { updated_at: now() })
@@ -299,43 +353,8 @@ export const api = {
     return row.id
   },
 
-  /* ---------- strona klienta (bez logowania, przez krótki adres) ---------- */
-  async publicBrief(clientSlug: string, slug: string): Promise<PublicBrief | null> {
-    if (isDemo)
-      return demo((db) => {
-        const c = db.clients.find((x) => x.slug === clientSlug)
-        const b = c && db.briefs.find((x) => x.client_id === c.id && x.slug === slug)
-        if (!c || !b) return null
-        if (b.status === 'draft') return { status: 'draft', client_name: c.company ?? c.name } as PublicBrief
-        b.opened_at ??= now()
-        return {
-          status: b.status, title: b.title, description: b.description, intro: b.intro, schema: b.schema,
-          answers: b.answers, client_name: c.company ?? c.name, submitted_at: b.submitted_at, token: b.token,
-        }
-      })
-    return must(await sb().rpc('get_brief_by_slug', { p_client: clientSlug, p_brief: slug }))
-  },
-  async savePublicBrief(token: string, answers: Answers, submit = false, notify?: { client: string; brief: string }) {
-    if (isDemo)
-      return demo((db) => {
-        const b = db.briefs.find((x) => x.token === token)!
-        if (b.status === 'submitted') throw new Error('already_submitted')
-        b.answers = answers
-        b.status = submit ? 'submitted' : 'in_progress'
-        b.submitted_at = submit ? now() : null
-        b.updated_at = now()
-      })
-    must(await sb().rpc('save_brief', { p_token: token, p_answers: answers, p_submit: submit }))
-    if (submit && notify) {
-      // powiadomienie e-mail (opcjonalne, działa, gdy skonfigurowano Resend)
-      fetch('/.netlify/functions/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(notify),
-      }).catch(() => {})
-    }
-  },
-  async portal(clientSlug: string): Promise<PublicPortal | null> {
+  /* ---------- publiczny podgląd pytań (bez logowania, bez odpowiedzi) ---------- */
+  async publicPortal(clientSlug: string): Promise<PublicPortal | null> {
     if (isDemo)
       return demo((db) => {
         const c = db.clients.find((x) => x.slug === clientSlug)
@@ -346,10 +365,65 @@ export const api = {
           briefs: db.briefs
             .filter((b) => b.client_id === c.id && b.status !== 'draft')
             .sort((a, b) => a.position - b.position)
-            .map((b) => ({ title: b.title, description: b.description, status: b.status, token: b.token, slug: b.slug, template_key: b.template_key })),
+            .map((b) => ({ title: b.title, description: b.description, slug: b.slug, template_key: b.template_key })),
         }
       })
-    return must(await sb().rpc('get_portal_by_slug', { p_client: clientSlug }))
+    return must(await sb().rpc('get_public_portal', { p_client: clientSlug }))
+  },
+  async publicBrief(clientSlug: string, slug: string): Promise<PublicBrief | null> {
+    if (isDemo)
+      return demo((db) => {
+        const c = db.clients.find((x) => x.slug === clientSlug)
+        const b = c && db.briefs.find((x) => x.client_id === c.id && x.slug === slug)
+        if (!c || !b) return null
+        if (b.status === 'draft') return { status: 'draft', client_name: c.company ?? c.name } as PublicBrief
+        return {
+          status: 'sent', title: b.title, description: b.description, intro: b.intro, schema: b.schema,
+          answers: {}, client_name: c.company ?? c.name, submitted_at: null,
+        }
+      })
+    return must(await sb().rpc('get_public_brief', { p_client: clientSlug, p_brief: slug }))
+  },
+
+  /* ---------- konto klienta (po zalogowaniu) ---------- */
+  /** Firma przypisana do zalogowanego klienta */
+  async myClient(): Promise<Client | null> {
+    if (isDemo)
+      return demo((db) => (sessionStorage.getItem('nafu-demo-auth') === 'client' ? db.clients.find((c) => c.user_id) ?? null : null))
+    const { data: s } = await sb().auth.getSession()
+    if (!s.session) return null
+    const { data } = await sb().from('clients').select('*').eq('user_id', s.session.user.id).maybeSingle()
+    return (data as Client | null) ?? null
+  },
+  async myBriefs(clientId: string): Promise<Brief[]> {
+    if (isDemo)
+      return demo((db) => db.briefs.filter((b) => b.client_id === clientId && b.status !== 'draft').sort((a, b) => a.position - b.position))
+    return must(await sb().from('briefs').select('*').eq('client_id', clientId).neq('status', 'draft').order('position').order('created_at'))
+  },
+  async openMyBrief(briefId: string) {
+    if (isDemo) return
+    await sb().rpc('open_my_brief', { p_brief: briefId })
+  },
+  async saveMyBrief(briefId: string, answers: Answers, submit = false) {
+    if (isDemo)
+      return demo((db) => {
+        const b = db.briefs.find((x) => x.id === briefId)!
+        if (b.status === 'submitted') throw new Error('already_submitted')
+        b.answers = answers
+        b.status = submit ? 'submitted' : 'in_progress'
+        b.submitted_at = submit ? now() : null
+        b.updated_at = now()
+      })
+    must(await sb().rpc('save_my_brief', { p_brief: briefId, p_answers: answers, p_submit: submit }))
+    if (submit) {
+      // powiadomienie e-mail (opcjonalne, działa, gdy skonfigurowano Resend)
+      const { data } = await sb().auth.getSession()
+      fetch('/.netlify/functions/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+        body: JSON.stringify({ briefId }),
+      }).catch(() => {})
+    }
   },
 }
 
@@ -357,3 +431,4 @@ export const api = {
 const SITE = ((import.meta.env.VITE_SITE_URL as string | undefined) || location.origin).replace(/\/$/, '')
 export const portalLink = (client: Pick<Client, 'slug'>) => `${SITE}/${client.slug}`
 export const briefLink = (client: Pick<Client, 'slug'>, brief: Pick<Brief, 'slug'>) => `${SITE}/${client.slug}/${brief.slug}`
+export const loginLink = () => `${SITE}/logowanie`

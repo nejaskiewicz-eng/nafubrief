@@ -64,7 +64,21 @@ export const handler: Handler = async (event) => {
     if (!client) return fail('Nie znaleziono klienta')
 
     const filled = (briefs ?? []).filter((b) => Object.keys(b.answers ?? {}).length > 0)
-    if (!filled.length) return fail('Klient nie udzielił jeszcze odpowiedzi.')
+
+    // dane ze strefy klienta: profil, zespół, usługi, lista plików
+    const [{ data: profile }, { data: team }, { data: services }, { data: files }] = await Promise.all([
+      db.from('client_profiles').select('data').eq('client_id', client.id).maybeSingle(),
+      db.from('team_members').select('name, role, bio, qualifications, specializations, services, schedule').eq('client_id', client.id).order('position'),
+      db.from('services').select('name, category, description, duration_min, price, locations, show_on_site, show_in_calendar').eq('client_id', client.id).order('position'),
+      db.from('client_files').select('name, category, kind, url').eq('client_id', client.id).in('kind', ['media', 'certificate']),
+    ])
+    const extra: string[] = []
+    if (profile?.data && Object.keys(profile.data).length) extra.push(`## Profil firmy (dane od klienta)\n\`\`\`json\n${JSON.stringify(profile.data, null, 2)}\n\`\`\``)
+    if (team?.length) extra.push(`## Zespół\n\`\`\`json\n${JSON.stringify(team, null, 2)}\n\`\`\``)
+    if (services?.length) extra.push(`## Usługi\n\`\`\`json\n${JSON.stringify(services, null, 2)}\n\`\`\``)
+    if (files?.length) extra.push(`## Wgrane materiały (${files.length})\n${files.map((f) => `- ${f.name}${f.category ? ` [${f.category}]` : ''}${f.url ? ' (link)' : ''}`).join('\n')}`)
+
+    if (!filled.length && !extra.length) return fail('Klient nie udzielił jeszcze odpowiedzi.')
     if (!process.env.ANTHROPIC_API_KEY) return fail('Brak ANTHROPIC_API_KEY w ustawieniach Netlify.')
 
     const header = [
@@ -78,7 +92,7 @@ export const handler: Handler = async (event) => {
       .filter(Boolean)
       .join('\n')
 
-    const body = filled.map((b) => briefToMarkdown(b.title, b.schema, b.answers)).join('\n\n---\n\n')
+    const body = [...filled.map((b) => briefToMarkdown(b.title, b.schema, b.answers)), ...extra].join('\n\n---\n\n')
 
     const anthropic = new Anthropic()
     const stream = anthropic.beta.messages.stream({

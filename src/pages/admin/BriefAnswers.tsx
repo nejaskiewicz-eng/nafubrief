@@ -113,7 +113,7 @@ export function BriefPreview() {
           <Icon name="back" size={15} /> Zamknij podgląd
         </button>
       </div>
-      <BriefForm data={data} preview />
+      <BriefForm data={data} mode="preview" />
     </>
   )
 }
