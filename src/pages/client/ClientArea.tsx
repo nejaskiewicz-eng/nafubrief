@@ -91,6 +91,9 @@ export function ClientChrome({ children, email, client }: { children: ReactNode;
           © {new Date().getFullYear()} NAFU Design · {CONTACT.names} · {CONTACT.city}
         </span>
         <span className="row">
+          <a href="/poradnik.pdf" target="_blank" rel="noopener">
+            Poradnik (PDF)
+          </a>
           <a href={CONTACT.phoneHref}>{CONTACT.phone}</a>
           <a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a>
         </span>

@@ -4,7 +4,7 @@ import {
   CONTACT, Icon, Modal, Spinner, StatusBadge, TEMPLATE_COLORS, TEMPLATE_LETTER,
   copyText, downloadFile, fmtDate, useToast,
 } from '../../components/ui'
-import { api, briefLink, loginLink, portalLink, type ClientInput } from '../../lib/api'
+import { api, briefLink, loginLink, portalLink, SITE_URL, type ClientInput } from '../../lib/api'
 import { surveyProgress } from '../../lib/format'
 import { renderMarkdown } from '../../lib/markdown'
 import type { Brief, Client, Summary, TemplateKey } from '../../lib/types'
@@ -391,6 +391,8 @@ ${portalLink(client)}
 ${briefs.map((b) => `• ${b.title}: ${briefLink(client, b)}`).join('\n')}
 ${login ? `\n${login}\n` : ''}
 Możesz wypełniać ankiety w kilku podejściach, odpowiedzi zapisują się automatycznie. Jeśli czegoś nie wiesz, zostaw puste, omówimy to razem.
+
+Krótki poradnik, jak korzystać ze strefy klienta: ${SITE_URL}/poradnik.pdf
 
 W razie pytań jestem pod telefonem ${CONTACT.phone} i mailem ${CONTACT.email}.
 

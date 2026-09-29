@@ -97,7 +97,10 @@ export default function Login({ variant = 'admin' }: { variant?: 'admin' | 'clie
         </button>
         {isClient && (
           <p className="note">
-            Nie pamiętasz hasła? Zadzwoń pod {CONTACT.phone} albo napisz na {CONTACT.email}, ustawię nowe.
+            Nie pamiętasz hasła? Zadzwoń pod {CONTACT.phone} albo napisz na {CONTACT.email}, ustawię nowe.{' '}
+            <a href="/poradnik.pdf" target="_blank" rel="noopener" style={{ color: 'var(--teal)' }}>
+              Jak korzystać ze strefy klienta (PDF)
+            </a>
           </p>
         )}
         <div className="lg-foot">
