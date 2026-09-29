@@ -58,10 +58,19 @@ export const legal: Template = {
             help: 'Też trafi do polityki prywatności. Może to być numer, pod którym zwykle się z Tobą kontaktują.',
           }),
           single('l1_iod', 'Czy Twoja firma ma wyznaczonego Inspektora Ochrony Danych (IOD)?', YES_NO_UNSURE, {
-            help: 'IOD to osoba lub firma, która oficjalnie pilnuje ochrony danych i jest zgłoszona do Prezesa UODO. Większość małych firm go nie ma i nie musi mieć. Jeśli nic Ci to nie mówi, najpewniej odpowiedź brzmi „nie”.',
+            help: 'IOD to osoba lub firma, która oficjalnie pilnuje ochrony danych i jest zgłoszona do Prezesa UODO. Większość małych firm go nie ma i nie musi mieć. Jeśli nic Ci to nie mówi, najpewniej odpowiedź brzmi „nie”. Jeśli zaznaczysz „Tak”, pojawią się pytania o dane inspektora.',
           }),
-          area('l1_iod_data', 'Podaj dane kontaktowe Inspektora Ochrony Danych.', {
-            help: 'Imię i nazwisko albo nazwa firmy, adres e-mail i telefon. Te dane muszą znaleźć się w polityce prywatności.',
+          text('l1_iod_name', 'Jak nazywa się Inspektor Ochrony Danych w Twojej firmie?', {
+            placeholder: 'Imię i nazwisko albo nazwa firmy pełniącej tę funkcję',
+            help: 'Dane inspektora muszą znaleźć się w polityce prywatności i w klauzulach przy formularzach.',
+            showIf: { id: 'l1_iod', value: 'Tak' },
+          }),
+          text('l1_iod_email', 'Pod jakim adresem e-mail można skontaktować się z Inspektorem Ochrony Danych?', {
+            placeholder: 'np. iod@twojafirma.pl',
+            showIf: { id: 'l1_iod', value: 'Tak' },
+          }),
+          text('l1_iod_phone', 'Pod jakim numerem telefonu można skontaktować się z Inspektorem Ochrony Danych?', {
+            help: 'Jeśli inspektor nie ma osobnego numeru, pomiń to pytanie.',
             showIf: { id: 'l1_iod', value: 'Tak' },
           }),
           single('l1_staff', 'Ile osób pracuje w Twojej firmie, licząc Ciebie oraz osoby na umowach zlecenie i B2B?', [
