@@ -337,12 +337,14 @@ export const legal: Template = {
           single('l6_applies', 'Czy w Twojej firmie obsługiwane są osoby poniżej 18. roku życia?', ['Tak', 'Nie'], {
             help: 'Jeśli tak, obowiązek przygotowania standardów dotyczy Twojej firmy, nawet jeśli dzieci przychodzą z rodzicami.',
           }),
-          repeater('l6_responsible', 'Kto w każdym z Twoich salonów odpowiada za przestrzeganie standardów ochrony dzieci?', 'Osoba', [
+          repeater('l6_responsible', 'Kto w każdym z Twoich salonów odpowiada za przestrzeganie standardów ochrony dzieci?', 'Osoba odpowiedzialna', [
             ['Salon lub lokalizacja'],
             ['Imię i nazwisko'],
-            ['Telefon lub e-mail'],
+            ['Stanowisko lub funkcja, np. właścicielka, kierowniczka salonu'],
+            ['Numer telefonu'],
+            ['Adres e-mail'],
           ], {
-            help: 'To osoba, do której pracownicy i rodzice mogą się zgłosić, jeśli coś ich zaniepokoi. Może to być Ty.',
+            help: 'To osoba, do której pracownicy i rodzice mogą się zgłosić, jeśli coś ich zaniepokoi. Jej imię, nazwisko i dane kontaktowe muszą znaleźć się w standardach i w ich skróconej wersji na stronie. Może to być Ty. Jeśli w kilku salonach odpowiada ta sama osoba, wpisz ją raz i dopisz wszystkie salony.',
             showIf: { id: 'l6_applies', value: 'Tak' },
           }),
           area('l6_staff', 'Które osoby lub stanowiska mają w pracy kontakt z dziećmi?', {
