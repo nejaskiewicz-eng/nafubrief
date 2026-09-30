@@ -11,20 +11,28 @@ import type { Brief, Client, Summary, TemplateKey } from '../../lib/types'
 import { TemplatePicker } from './Dashboard'
 import { isDemo } from '../../lib/supabase'
 import { unreadCount } from '../../lib/workspace'
+import Access from '../../workspace/Access'
+import Documents from '../../workspace/Documents'
 import Media from '../../workspace/Media'
+import Preview from '../../workspace/Preview'
+import Start from '../../workspace/Start'
 import Messages from '../../workspace/Messages'
 import Profile from '../../workspace/Profile'
 import Services from '../../workspace/Services'
 import Team from '../../workspace/Team'
 
-type Tab = 'briefs' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'wiadomosci' | 'ai' | 'data'
+type Tab = 'start' | 'briefs' | 'podglad' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'dostepy' | 'dokumenty' | 'wiadomosci' | 'ai' | 'data'
 
 const TAB_LABELS: Array<[Tab, string]> = [
-  ['briefs', 'Ankiety i linki'],
+  ['start', 'Przebieg projektu'],
+  ['briefs', 'Ankiety i dostęp'],
+  ['podglad', 'Podgląd strony'],
   ['profil', 'Profil firmy'],
   ['media', 'Baza mediów'],
   ['zespol', 'Zespół'],
   ['uslugi', 'Usługi'],
+  ['dostepy', 'Dostępy'],
+  ['dokumenty', 'Dokumenty'],
   ['wiadomosci', 'Wiadomości'],
   ['ai', 'Podsumowanie AI'],
   ['data', 'Dane klienta'],
@@ -34,7 +42,7 @@ export default function ClientDetail() {
   const { id = '' } = useParams()
   const [client, setClient] = useState<Client | null>(null)
   const [briefs, setBriefs] = useState<Brief[] | null>(null)
-  const [tab, setTab] = useState<Tab>('briefs')
+  const [tab, setTab] = useState<Tab>('start')
   const [unread, setUnread] = useState(0)
   useEffect(() => {
     if (!isDemo) unreadCount(id, true).then(setUnread).catch(() => {})
@@ -86,6 +94,10 @@ export default function ClientDetail() {
       </div>
 
       {tab === 'briefs' && <BriefsTab client={client} briefs={briefs} reload={reload} />}
+      {tab === 'start' && <Start client={client} briefs={briefs} isAdmin onGo={(t) => setTab(t === 'start' ? 'start' : (t as Tab))} />}
+      {tab === 'podglad' && <Preview client={client} isAdmin />}
+      {tab === 'dostepy' && <Access clientId={client.id} isAdmin />}
+      {tab === 'dokumenty' && <Documents client={client} isAdmin />}
       {tab === 'profil' && <Profile clientId={client.id} />}
       {tab === 'media' && <Media clientId={client.id} />}
       {tab === 'zespol' && <Team clientId={client.id} />}

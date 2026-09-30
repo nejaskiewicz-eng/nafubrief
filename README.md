@@ -28,7 +28,7 @@ Bez pliku `.env` aplikacja działa w **trybie demo** (dane w przeglądarce, logo
 ### 1. Supabase
 
 1. Załóż projekt na [supabase.com](https://supabase.com) (region: Frankfurt / EU - dane klientów zostają w UE).
-2. **SQL Editor** → wklej po kolei wszystkie pliki z `supabase/migrations/` (od `001` do `004`) → **Run**.
+2. **SQL Editor** → wklej po kolei wszystkie pliki z `supabase/migrations/` (od `001` do `007`) → **Run**.
 3. **Authentication → Users → Add user**: Twój e-mail i hasło (to konto do panelu).
 4. **Authentication → Sign In / Providers**: wyłącz **Allow new users to sign up** - tylko Ty masz konto.
 5. **Project Settings → API**: skopiuj *Project URL* i *publishable / anon key*.
@@ -86,3 +86,17 @@ public/brand/      logo i key visual NAFU
 ```
 
 Kontakt: Natalia Jaśkiewicz · NAFU Design · Bolesławiec · +48 571 786 388 · n.e.jaskiewicz@gmail.com
+
+## Podgląd strony z pinezkami
+
+Klient komentuje roboczy podgląd strony w zakładce „Podgląd strony”. Żeby mógł wskazywać konkretne miejsca (pinezki), do wersji podglądowej projektu dodaj w `<head>`:
+
+```html
+<script src="https://nafu-design.com/feedback.js" defer></script>
+```
+
+Podgląd musi dać się wyświetlić w ramce (na Vercelu wyłącz Deployment Protection dla podglądu). Przed publikacją usuń skrypt z wersji produkcyjnej. Panel sam sprawdza, czy skrypt jest na podglądzie.
+
+## Dokumenty prawne przez Claude
+
+W kartotece klienta → Dokumenty jest polecenie do skopiowania, np. „Przygotuj dokumenty prawne dla klienta optyka-perfect (NAFU Brief).” Wklej je w Claude w tym projekcie. Skill `.claude/skills/dokumenty-prawne` pobiera dane klienta z Supabase, pracuje na skillach prawnych (prawny-router-v3 i skille dziedzinowe) i zapisuje szkice jako niewidoczne dla klienta. Po sprawdzeniu klikasz „Udostępnij klientowi”.

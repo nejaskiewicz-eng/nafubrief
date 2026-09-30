@@ -4,7 +4,10 @@ import { CONTACT, Loading } from '../../components/ui'
 import { api, type Session } from '../../lib/api'
 import type { Client } from '../../lib/types'
 import { unreadCount } from '../../lib/workspace'
+import Access from '../../workspace/Access'
+import Documents from '../../workspace/Documents'
 import Media from '../../workspace/Media'
+import Preview from '../../workspace/Preview'
 import Messages from '../../workspace/Messages'
 import Profile from '../../workspace/Profile'
 import Services from '../../workspace/Services'
@@ -45,11 +48,14 @@ export default function ClientArea() {
 }
 
 const TABS: Array<[string, string]> = [
-  ['', 'Ankiety'],
+  ['', 'Start'],
+  ['podglad', 'Podgląd strony'],
   ['profil', 'Profil firmy'],
   ['media', 'Baza mediów'],
   ['zespol', 'Zespół'],
   ['uslugi', 'Usługi'],
+  ['dostepy', 'Dostępy'],
+  ['dokumenty', 'Dokumenty'],
   ['wiadomosci', 'Wiadomości'],
 ]
 
@@ -103,12 +109,15 @@ export function ClientChrome({ children, email, client }: { children: ReactNode;
 }
 
 /** Zakładki strefy klienta (tylko po zalogowaniu) */
-export function ClientTab({ tab }: { tab: 'profil' | 'media' | 'zespol' | 'uslugi' | 'wiadomosci' }) {
+export function ClientTab({ tab }: { tab: 'podglad' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'dostepy' | 'dokumenty' | 'wiadomosci' }) {
   const { client = '' } = useParams()
   const { session, mine } = useClientCtx()
   if (!session || !mine) return <Navigate to={`/logowanie?next=${encodeURIComponent(`/${client}/${tab}`)}`} replace />
   return (
     <ClientChrome email={session.email} client={mine}>
+      {tab === 'podglad' && <Preview client={mine} isAdmin={false} />}
+      {tab === 'dostepy' && <Access clientId={mine.id} isAdmin={false} />}
+      {tab === 'dokumenty' && <Documents client={mine} isAdmin={false} />}
       {tab === 'profil' && <Profile clientId={mine.id} />}
       {tab === 'media' && <Media clientId={mine.id} />}
       {tab === 'zespol' && <Team clientId={mine.id} />}

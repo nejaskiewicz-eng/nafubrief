@@ -5,12 +5,13 @@ import { api } from '../../lib/api'
 import type { Brief, BriefStatus, Client, PublicPortal } from '../../lib/types'
 import { ClientChrome, useClientCtx } from './ClientArea'
 import { Notice } from './BriefForm'
+import Start from '../../workspace/Start'
 
 type Row = { title: string; description: string | null; slug: string; template_key: string; status?: BriefStatus; urgent?: boolean }
 type State =
   | { kind: 'loading' }
   | { kind: 'missing' }
-  | { kind: 'ok'; name: string; slug: string; rows: Row[]; email?: string; mine?: Client }
+  | { kind: 'ok'; name: string; slug: string; rows: Row[]; email?: string; mine?: Client; briefs?: Brief[] }
 
 export default function Portal() {
   const { client = '' } = useParams()
@@ -32,6 +33,7 @@ export default function Portal() {
             slug: mine.slug,
             email: session.email,
             mine,
+            briefs,
             rows: briefs.map((b) => ({ title: b.title, description: b.description, slug: b.slug, template_key: b.template_key, status: b.status, urgent: b.urgent })),
           })
         return
@@ -57,12 +59,14 @@ export default function Portal() {
     return (
       <ClientChrome email={state.email!} client={state.mine}>
         <div className="ws">
-          <div className="ws-savebar">
-            <span style={{ fontSize: 14.5 }}>
-              Wysłano <strong>{done}</strong> z {state.rows.length} ankiet.{' '}
+          <Start client={state.mine} briefs={state.briefs ?? []} isAdmin={false} />
+          <section className="card ws-card">
+            <h2>Ankiety</h2>
+            <p className="muted ws-lead">
+              Wysłano <strong>{done}</strong> z {state.rows.length}.{' '}
               {urgentOpen > 0 && <strong style={{ color: 'var(--danger)' }}>Pilne do wypełnienia: {urgentOpen}.</strong>}
-            </span>
-          </div>
+            </p>
+          </section>
           <List rows={state.rows} slug={state.slug} loggedIn />
           <p className="muted" style={{ fontSize: 14.5, margin: 0 }}>
             Ankiety możesz wypełniać w kilku podejściach, wszystko zapisuje się na Twoim koncie. W zakładkach powyżej uzupełnisz profil firmy, wgrasz zdjęcia i pliki, dodasz zespół i usługi.
