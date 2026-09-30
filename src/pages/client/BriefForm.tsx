@@ -26,7 +26,7 @@ export default function BriefFormPage() {
       if (session && mine) {
         const b = (await api.myBriefs(mine.id)).find((x) => x.slug === brief)
         if (b) {
-          api.openMyBrief(b.id)
+          if (!session.preview) api.openMyBrief(b.id)
           const data: PublicBrief = {
             status: b.status, title: b.title, description: b.description, intro: b.intro, schema: b.schema,
             answers: b.answers, client_name: mine.company || mine.name, submitted_at: b.submitted_at,

@@ -3,7 +3,7 @@
 import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 
-type Body = { action: 'create' | 'password' | 'remove'; clientId: string; email?: string; password?: string }
+type Body = { action: 'create' | 'password' | 'remove' | 'preview'; clientId: string; email?: string; password?: string }
 
 const json = (statusCode: number, body: unknown) => ({
   statusCode,
@@ -77,6 +77,20 @@ export const handler: Handler = async (event) => {
     })
     if (error) return json(400, { error: error.message })
     return json(200, { ok: true, email: client.login_email })
+  }
+
+  if (body.action === 'preview') {
+    // Sprawdzenie konta przez administratorkę: wymuszenie zmiany hasła wyłączone na 60 minut
+    // (po wylogowaniu klienta aplikacja przywraca je od razu)
+    if (!client.user_id) return json(400, { error: 'Ten klient nie ma jeszcze konta.' })
+    const { data: u, error: getErr } = await admin.auth.admin.getUserById(client.user_id)
+    if (getErr || !u.user) return json(400, { error: getErr?.message ?? 'Nie znaleziono konta.' })
+    const until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const { error } = await admin.auth.admin.updateUserById(client.user_id, {
+      user_metadata: { ...(u.user.user_metadata ?? {}), preview_until: until },
+    })
+    if (error) return json(400, { error: error.message })
+    return json(200, { ok: true, email: client.login_email, until })
   }
 
   if (body.action === 'remove') {

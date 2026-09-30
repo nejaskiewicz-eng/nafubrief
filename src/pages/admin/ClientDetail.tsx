@@ -120,6 +120,7 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
   const [sharing, setSharing] = useState(false)
   const [access, setAccess] = useState<null | 'create' | 'password'>(null)
   const [creds, setCreds] = useState<{ email: string; password: string } | null>(null)
+  const [checking, setChecking] = useState(false)
   const drafts = briefs.filter((b) => b.status === 'draft')
   const live = briefs.filter((b) => b.status !== 'draft')
 
@@ -173,6 +174,19 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
               <div className="row">
                 <button className="btn btn-sm" onClick={() => setAccess('password')}>
                   <Icon name="unlock" size={15} /> Nowe hasło
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={async () => {
+                    try {
+                      await api.clientAccess('preview', client.id)
+                      setChecking(true)
+                    } catch (e) {
+                      toast((e as Error).message)
+                    }
+                  }}
+                >
+                  <Icon name="eye" size={15} /> Sprawdź konto klienta
                 </button>
                 <button
                   className="btn btn-sm btn-danger"
@@ -254,6 +268,33 @@ function BriefsTab({ client, briefs, reload }: { client: Client; briefs: Brief[]
             setSharing(true)
           }}
         />
+      )}
+      {checking && (
+        <Modal label="Sprawdź konto klienta" onClose={() => setChecking(false)}>
+          <div className="eyebrow">Dostęp klienta</div>
+          <h2 style={{ marginTop: 8 }}>Możesz sprawdzić konto klienta</h2>
+          <p className="muted">Wymuszenie zmiany hasła jest wyłączone na 60 minut. Po wylogowaniu z konta klienta wróci od razu.</p>
+          <ol className="check-steps">
+            <li>
+              Otwórz <strong>okno prywatne</strong> przeglądarki (Cmd+Shift+N), żeby nie wylogować się z panelu.
+            </li>
+            <li>
+              Wejdź na <strong>{loginLink()}</strong> i zaloguj się adresem <strong>{client.login_email}</strong> oraz hasłem tymczasowym klienta. Jeśli go nie masz, ustaw nowe przyciskiem „Nowe hasło”.
+            </li>
+            <li>Oglądaj, ale nie wypełniaj i nie wysyłaj ankiet: to zapisałoby się jako odpowiedzi klienta.</li>
+            <li>
+              Na koniec kliknij <strong>Wyloguj</strong>.
+            </li>
+          </ol>
+          <div className="modal-actions">
+            <button className="btn" onClick={() => copyText(loginLink()).then(() => toast('Skopiowano adres logowania'))}>
+              <Icon name="copy" size={16} /> Kopiuj adres logowania
+            </button>
+            <button className="btn btn-primary" onClick={() => setChecking(false)}>
+              Rozumiem
+            </button>
+          </div>
+        </Modal>
       )}
       {sharing && (
         <ShareModal

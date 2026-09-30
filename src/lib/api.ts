@@ -2,7 +2,7 @@ import { isDemo, supabase } from './supabase'
 import type { Answers, Brief, Client, PublicBrief, PublicPortal, Summary, TemplateKey } from './types'
 
 export type ClientInput = Partial<Omit<Client, 'id' | 'portal_token' | 'slug' | 'user_id' | 'login_email' | 'created_at'>> & { name: string }
-export type Session = { email: string; role: 'admin' | 'client'; mustChangePassword?: boolean }
+export type Session = { email: string; role: 'admin' | 'client'; mustChangePassword?: boolean; preview?: boolean }
 export type ClientWithBriefs = Client & { briefs: Pick<Brief, 'id' | 'title' | 'status' | 'template_key' | 'submitted_at'>[] }
 
 const clone = <T,>(x: T): T => (x === undefined ? x : JSON.parse(JSON.stringify(x)))
@@ -125,10 +125,14 @@ export const api = {
     // świeży odczyt metadanych (flaga wymuszonej zmiany hasła)
     const { data: u } = await sb().auth.getUser()
     const user = u.user ?? data.session.user
+    // tryb sprawdzania konta przez administratorkę (wymuszenie zmiany hasła wstrzymane czasowo)
+    const until = user.user_metadata?.preview_until as string | undefined
+    const preview = !isAdmin && !!until && new Date(until).getTime() > Date.now()
     return {
       email: user.email ?? '',
       role: isAdmin ? 'admin' : 'client',
-      mustChangePassword: !isAdmin && user.user_metadata?.must_change_password === true,
+      mustChangePassword: !isAdmin && !preview && user.user_metadata?.must_change_password === true,
+      preview,
     }
   },
   async signIn(email: string, password: string, demoRole: 'admin' | 'client' = 'admin') {
@@ -141,6 +145,11 @@ export const api = {
   },
   async signOut() {
     if (isDemo) return sessionStorage.removeItem('nafu-demo-auth')
+    // koniec sprawdzania konta: wymuszenie zmiany hasła wraca od razu
+    const { data } = await sb().auth.getSession()
+    if (data.session?.user.user_metadata?.preview_until) {
+      await sb().auth.updateUser({ data: { preview_until: null } }).catch(() => {})
+    }
     await sb().auth.signOut()
   },
   async changePassword(password: string) {
@@ -213,7 +222,7 @@ export const api = {
   },
 
   /** Konto klienta: utworzenie, nowe hasło, usunięcie dostępu */
-  async clientAccess(action: 'create' | 'password' | 'remove', clientId: string, email?: string, password?: string) {
+  async clientAccess(action: 'create' | 'password' | 'remove' | 'preview', clientId: string, email?: string, password?: string) {
     if (isDemo)
       return demo((db) => {
         const c = db.clients.find((x) => x.id === clientId)!

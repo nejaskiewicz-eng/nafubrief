@@ -44,7 +44,16 @@ export default function ClientArea() {
   if (!ctx) return <Loading />
   // pierwsze logowanie albo hasło nadane przez administratorkę: najpierw własne hasło
   if (ctx.session?.role === 'client' && ctx.session.mustChangePassword) return <SetPassword onDone={load} />
-  return <Outlet context={ctx} />
+  return (
+    <>
+      {ctx.session?.preview && (
+        <div className="preview-bar">
+          Tryb sprawdzania konta: zmiana hasła wyłączona tymczasowo. Nie wypełniaj ankiet. Po wylogowaniu wymuszenie wróci.
+        </div>
+      )}
+      <Outlet context={ctx} />
+    </>
+  )
 }
 
 const TABS: Array<[string, string]> = [
