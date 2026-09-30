@@ -184,7 +184,7 @@ export const api = {
         db.clients.push(c)
         rows.forEach((r) =>
           db.briefs.push({
-            ...r, id: uuid(), client_id: c.id, answers: {}, status: 'draft', urgent: false, step_id: null,
+            ...r, id: uuid(), client_id: c.id, answers: {}, status: 'draft', urgent: false, step_id: null, step_position: 0,
             token: uuid(), slug: briefSlug(db, c.id, r.template_key), opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
@@ -260,14 +260,14 @@ export const api = {
       return demo((db) => {
         rows.forEach((r) =>
           db.briefs.push({
-            ...r, step_id: (r as { step_id?: string }).step_id ?? null, id: uuid(), answers: {}, status: 'draft', urgent: false, token: uuid(), slug: briefSlug(db, clientId, r.template_key),
+            ...r, step_id: (r as { step_id?: string }).step_id ?? null, step_position: 0, id: uuid(), answers: {}, status: 'draft', urgent: false, token: uuid(), slug: briefSlug(db, clientId, r.template_key),
             opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
       })
     must(await sb().from('briefs').insert(rows))
   },
-  async updateBrief(id: string, patch: Partial<Pick<Brief, 'title' | 'description' | 'intro' | 'schema' | 'status' | 'position' | 'answers' | 'submitted_at' | 'urgent' | 'step_id'>>) {
+  async updateBrief(id: string, patch: Partial<Pick<Brief, 'title' | 'description' | 'intro' | 'schema' | 'status' | 'position' | 'answers' | 'submitted_at' | 'urgent' | 'step_id' | 'step_position'>>) {
     if (isDemo)
       return demo((db) => {
         Object.assign(db.briefs.find((x) => x.id === id)!, patch, { updated_at: now() })

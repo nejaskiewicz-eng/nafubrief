@@ -52,28 +52,43 @@ export async function createDefaultSteps(clientId: string) {
   )
 }
 
-/* ---------- zadania dla klienta ---------- */
+/* ---------- zadania w etapach ---------- */
 
 export interface Task {
   id: string
   client_id: string
+  step_id: string | null
   title: string
   note: string | null
   due_date: string | null
   done_at: string | null
+  position: number
+  /** kto wykonuje: klient czy NAFU Design */
+  assignee: 'client' | 'nafu'
+  /** czy klient widzi zadanie */
+  visible: boolean
   created_at: string
 }
 export async function listTasks(clientId: string): Promise<Task[]> {
-  return must(await sb().from('client_tasks').select('*').eq('client_id', clientId).order('done_at', { nullsFirst: true }).order('created_at'))
+  return must(await sb().from('client_tasks').select('*').eq('client_id', clientId).order('position').order('created_at'))
 }
-export async function addTask(clientId: string, title: string, note?: string, due?: string) {
-  must(await sb().from('client_tasks').insert({ client_id: clientId, title, note: note || null, due_date: due || null }))
+export async function addTask(t: Partial<Task> & { client_id: string; title: string }) {
+  must(await sb().from('client_tasks').insert(t))
 }
-export async function toggleTask(t: Task) {
-  must(await sb().from('client_tasks').update({ done_at: t.done_at ? null : new Date().toISOString() }).eq('id', t.id))
+export async function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'note' | 'due_date' | 'step_id' | 'position' | 'assignee' | 'visible' | 'done_at'>>) {
+  must(await sb().from('client_tasks').update(patch).eq('id', id))
+}
+/** Odhaczenie zadania: administratorka dowolne, klient tylko swoje (przez funkcję w bazie) */
+export async function toggleTask(t: Task, isAdmin = false) {
+  if (isAdmin) return updateTask(t.id, { done_at: t.done_at ? null : new Date().toISOString() })
+  must(await sb().rpc('toggle_my_task', { p_task: t.id }))
 }
 export async function deleteTask(id: string) {
   must(await sb().from('client_tasks').delete().eq('id', id))
+}
+/** Zamiana miejscami dwóch elementów listy i zapis nowej kolejności */
+export async function saveOrder(table: 'project_steps' | 'client_tasks', ids: string[]) {
+  await Promise.all(ids.map((id, i) => sb().from(table).update({ position: i }).eq('id', id)))
 }
 
 /* ---------- koncept i podgląd ---------- */
