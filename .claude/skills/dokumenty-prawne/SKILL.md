@@ -13,7 +13,7 @@ Natalia prowadzi NAFU Design (jednoosobowa pracownia). Panel NAFU Brief działa 
 - **Nowa strona** („dla nowej strony”): pełny komplet pod nowy projekt, zgodnie z planowanymi funkcjami z briefu, ankiety technicznej i usług.
 - Jeśli tryb nie jest podany, zapytaj Natalię.
 
-Tytuły szkiców oznaczaj trybem, np. „Polityka prywatności (obecna strona)”, żeby oba komplety mogły istnieć obok siebie.
+Żeby oba komplety mogły istnieć obok siebie, dokumenty dla obecnej strony tytułuj np. „Polityka prywatności (obecna strona)”. Natalia może zmienić tytuł w panelu, zanim udostępni dokument klientowi.
 
 ## 1. Pobierz dane klienta
 
@@ -76,22 +76,23 @@ Na podstawie odpowiedzi przygotuj tylko te, które dotyczą klienta:
 
 ## 5. Zapisz szkice w panelu
 
-Każdy dokument wstaw jako szkic widoczny tylko dla Natalii (`visible = false`). Użyj dollar-quotingu z unikalnym znacznikiem, żeby treść nie psuła zapytania:
+Klient nie może wiedzieć, jak dokumenty powstają. Dlatego:
+- w treści dokumentu i w polu `note` (klient je widzi) nigdy nie wspominaj o AI, Claude, skillach, szablonach ani o tym, że to szkic lub tekst wygenerowany; `note` zostaw puste,
+- wszystkie uwagi robocze (braki, punkty do sprawdzenia, sugestie konsultacji z prawnikiem) zapisuj wyłącznie w tabeli `document_notes`, której klient nie widzi.
+
+Każdy dokument wstaw jako niewidoczny dla klienta (`visible = false`). Użyj dollar-quotingu z unikalnym znacznikiem:
 
 ```sql
-insert into public.client_documents (client_id, title, kind, content, note, visible, requires_acceptance)
-values (
-  '<client_id>',
-  'Polityka prywatności',
-  'legal',
-  $nafudoc$<treść w Markdown>$nafudoc$,
-  $nafunote$Do sprawdzenia: <lista braków i punktów do weryfikacji>$nafunote$,
-  false,
-  true
-);
+with d as (
+  insert into public.client_documents (client_id, title, kind, content, visible, requires_acceptance)
+  values ('<client_id>', 'Polityka prywatności', 'legal', $nafudoc$<treść w Markdown>$nafudoc$, false, true)
+  returning id, client_id
+)
+insert into public.document_notes (document_id, client_id, body)
+select id, client_id, $nafunote$<braki i punkty do sprawdzenia>$nafunote$ from d;
 ```
 
-Jeśli szkic o tym samym tytule już istnieje i jest ukryty (`visible = false`), zaktualizuj go (`update … set content = …, note = …, updated_at = now()`) zamiast tworzyć duplikat. Nigdy nie zmieniaj dokumentów już udostępnionych klientowi (`visible = true`), chyba że Natalia wyraźnie o to poprosi.
+Jeśli dokument o tym samym tytule już istnieje i jest ukryty (`visible = false`), zaktualizuj go (`update public.client_documents set content = …, updated_at = now()` oraz `insert … on conflict (document_id) do update set body = excluded.body` w `document_notes`) zamiast tworzyć duplikat. Nigdy nie zmieniaj dokumentów już udostępnionych klientowi (`visible = true`), chyba że Natalia wyraźnie o to poprosi.
 
 ## 6. Podsumowanie dla Natalii
 

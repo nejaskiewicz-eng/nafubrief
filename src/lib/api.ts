@@ -1,5 +1,3 @@
-import { templateByKey } from '../templates'
-import { briefToMarkdown } from './format'
 import { isDemo, supabase } from './supabase'
 import type { Answers, Brief, Client, PublicBrief, PublicPortal, Summary, TemplateKey } from './types'
 
@@ -9,7 +7,9 @@ export type ClientWithBriefs = Client & { briefs: Pick<Brief, 'id' | 'title' | '
 
 const clone = <T,>(x: T): T => (x === undefined ? x : JSON.parse(JSON.stringify(x)))
 
-function newBriefFromTemplate(key: TemplateKey, position: number) {
+/** Szablony ładowane dopiero, gdy są potrzebne (tylko w panelu administratorki) */
+async function newBriefFromTemplate(key: TemplateKey, position: number) {
+  const { templateByKey } = await import('../templates')
   const t = templateByKey(key)
   if (!t) throw new Error(`Nieznany szablon: ${key}`)
   return {
@@ -48,8 +48,8 @@ function briefSlug(db: DemoDB, clientId: string, key: string) {
   for (let n = 2; db.briefs.some((b) => b.client_id === clientId && b.slug === s); n++) s = `${base}-${n}`
   return s
 }
-const uuid = () => crypto.randomUUID()
-const now = () => new Date().toISOString()
+export const uuid = () => crypto.randomUUID()
+export const now = () => new Date().toISOString()
 
 function load(): DemoDB {
   try {
@@ -83,23 +83,6 @@ function load(): DemoDB {
     created_at: now(),
   }
   const db: DemoDB = { clients: [client], briefs: [], summaries: [] }
-  ;(['strategy', 'legal'] as TemplateKey[]).forEach((k, i) =>
-    db.briefs.push({
-      ...newBriefFromTemplate(k, i),
-      id: uuid(),
-      client_id: client.id,
-      answers: {},
-      status: 'sent',
-      urgent: k === 'legal',
-      step_id: null,
-      token: uuid(),
-      slug: BRIEF_SLUG[k],
-      opened_at: null,
-      submitted_at: null,
-      created_at: now(),
-      updated_at: now(),
-    }),
-  )
   save(db)
   return db
 }
@@ -112,19 +95,19 @@ function save(db: DemoDB) {
   }
 }
 
-function demo<T>(fn: (db: DemoDB) => T): Promise<T> {
+export function demo<T>(fn: (db: DemoDB) => T): Promise<T> {
   const db = load()
   const out = fn(db)
   save(db)
   return new Promise((r) => setTimeout(() => r(clone(out)), 120))
 }
 
-function must<T>(res: { data: T | null; error: { message: string } | null }): T {
+export function must<T>(res: { data: T | null; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message)
   return res.data as T
 }
 
-const sb = () => supabase!
+export const sb = () => supabase!
 
 /* ------------------------------------------------------------------ */
 
@@ -191,21 +174,23 @@ export const api = {
     return must(await sb().from('clients').select('*').eq('id', id).single())
   },
   async createClient(input: ClientInput, templates: TemplateKey[]): Promise<Client> {
-    if (isDemo)
+    if (isDemo) {
+      const rows = await Promise.all(templates.map((k, i) => newBriefFromTemplate(k, i)))
       return demo((db) => {
         const c: Client = {
           company: null, email: null, phone: null, website: null, industry: null, notes: null,
           ...input, id: uuid(), portal_token: uuid(), slug: clientSlug(db, input), user_id: null, login_email: null, created_at: now(),
         }
         db.clients.push(c)
-        templates.forEach((k, i) =>
+        rows.forEach((r) =>
           db.briefs.push({
-            ...newBriefFromTemplate(k, i), id: uuid(), client_id: c.id, answers: {}, status: 'draft', urgent: false, step_id: null,
-            token: uuid(), slug: briefSlug(db, c.id, k), opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
+            ...r, id: uuid(), client_id: c.id, answers: {}, status: 'draft', urgent: false, step_id: null,
+            token: uuid(), slug: briefSlug(db, c.id, r.template_key), opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
         return c
       })
+    }
     const c = must<Client>(await sb().from('clients').insert(input).select().single())
     if (templates.length) await api.addBriefs(c.id, templates)
     return c
@@ -268,7 +253,9 @@ export const api = {
   },
   async addBriefs(clientId: string, keys: TemplateKey[], stepId?: string) {
     const existing = await api.listBriefs(clientId)
-    const rows = keys.map((k, i) => ({ ...newBriefFromTemplate(k, existing.length + i), client_id: clientId, ...(stepId ? { step_id: stepId } : {}) }))
+    const rows = await Promise.all(
+      keys.map(async (k, i) => ({ ...(await newBriefFromTemplate(k, existing.length + i)), client_id: clientId, ...(stepId ? { step_id: stepId } : {}) })),
+    )
     if (isDemo)
       return demo((db) => {
         rows.forEach((r) =>
@@ -305,53 +292,6 @@ export const api = {
   /** Pozwala klientowi ponownie edytować wysłaną ankietę */
   async reopenBrief(id: string) {
     return api.updateBrief(id, { status: 'in_progress', submitted_at: null })
-  },
-
-  /* ---------- podsumowania AI ---------- */
-  async listSummaries(clientId: string): Promise<Summary[]> {
-    if (isDemo)
-      return demo((db) => db.summaries.filter((s) => s.client_id === clientId).sort((a, b) => b.created_at.localeCompare(a.created_at)))
-    return must(await sb().from('summaries').select('*').eq('client_id', clientId).order('created_at', { ascending: false }))
-  },
-  async getSummary(id: string): Promise<Summary> {
-    if (isDemo) return demo((db) => db.summaries.find((s) => s.id === id)!)
-    return must(await sb().from('summaries').select('*').eq('id', id).single())
-  },
-  async deleteSummary(id: string) {
-    if (isDemo)
-      return demo((db) => {
-        db.summaries = db.summaries.filter((s) => s.id !== id)
-      })
-    must(await sb().from('summaries').delete().eq('id', id))
-  },
-  /** Zleca agentowi AI podsumowanie; zwraca id rekordu (status pending → done) */
-  async requestSummary(clientId: string, instructions: string): Promise<string> {
-    if (isDemo) {
-      const briefs = (await api.listBriefs(clientId)).filter((b) => b.status === 'submitted' || Object.keys(b.answers).length)
-      return demo((db) => {
-        const content = [
-          '> **Tryb demo.** To nie jest analiza AI. Po podłączeniu Supabase i klucza Anthropic agent przygotuje tu pełne podsumowanie, wnioski i konspekt pracy.',
-          '',
-          ...briefs.map((b) => briefToMarkdown(b.title, b.schema, b.answers)),
-        ].join('\n')
-        const s: Summary = {
-          id: uuid(), client_id: clientId, status: 'done', content, error: null, model: 'demo', created_at: now(),
-        }
-        db.summaries.push(s)
-        return s.id
-      })
-    }
-    const row = must<Summary>(await sb().from('summaries').insert({ client_id: clientId, status: 'pending' }).select().single())
-    const { data } = await sb().auth.getSession()
-    const res = await fetch('/.netlify/functions/summarize-background', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
-      body: JSON.stringify({ summaryId: row.id, instructions }),
-    })
-    if (!res.ok && res.status !== 202) {
-      await sb().from('summaries').update({ status: 'error', error: `Funkcja zwróciła ${res.status}` }).eq('id', row.id)
-    }
-    return row.id
   },
 
   /* ---------- publiczny podgląd pytań (bez logowania, bez odpowiedzi) ---------- */
@@ -393,8 +333,14 @@ export const api = {
       return demo((db) => (sessionStorage.getItem('nafu-demo-auth') === 'client' ? db.clients.find((c) => c.user_id) ?? null : null))
     const { data: s } = await sb().auth.getSession()
     if (!s.session) return null
-    const { data } = await sb().from('clients').select('*').eq('user_id', s.session.user.id).maybeSingle()
-    return (data as Client | null) ?? null
+    // tylko bezpieczne pola (bez notatek administratorki)
+    const { data } = await sb().rpc('my_client')
+    if (!data) return null
+    const c = data as Pick<Client, 'id' | 'name' | 'company' | 'slug' | 'login_email'>
+    return {
+      ...c, email: null, phone: null, website: null, industry: null, notes: null,
+      portal_token: '', user_id: s.session.user.id, created_at: '',
+    }
   },
   async myBriefs(clientId: string): Promise<Brief[]> {
     if (isDemo)

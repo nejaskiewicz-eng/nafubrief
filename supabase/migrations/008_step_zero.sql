@@ -63,3 +63,35 @@ begin
     where b.client_id = c.id and b.step_id is null;
   end loop;
 end $$;
+
+-- Dane tylko dla administratorki ---------------------------------------------
+
+-- notatki wewnętrzne do dokumentów w osobnej tabeli (klient nie ma do niej dostępu)
+create table if not exists public.document_notes (
+  document_id uuid primary key references public.client_documents(id) on delete cascade,
+  client_id   uuid not null references public.clients(id) on delete cascade,
+  body        text not null default '',
+  updated_at  timestamptz not null default now()
+);
+alter table public.document_notes enable row level security;
+drop policy if exists "admin only" on public.document_notes;
+create policy "admin only" on public.document_notes for all to authenticated
+  using ((select public.is_admin()) and (select public.can_access_client(client_id)))
+  with check ((select public.is_admin()) and (select public.can_access_client(client_id)));
+
+-- klient nie czyta tabeli klientów bezpośrednio (są tam notatki administratorki),
+-- tylko bezpieczne pola przez funkcję
+drop policy if exists "client reads own" on public.clients;
+
+create or replace function public.my_client() returns json
+language sql stable security definer set search_path = '' as $$
+  select json_build_object('id', c.id, 'name', c.name, 'company', c.company, 'slug', c.slug, 'login_email', c.login_email)
+  from public.clients c where c.user_id = (select auth.uid()) limit 1
+$$;
+revoke all on function public.my_client() from public, anon;
+grant execute on function public.my_client() to authenticated;
+
+-- ankiety klienta: warunek przez funkcję (klient nie czyta już tabeli klientów bezpośrednio)
+drop policy if exists "client reads own" on public.briefs;
+create policy "client reads own" on public.briefs for select to authenticated
+  using (status <> 'draft' and (select public.can_access_client(client_id)));

@@ -1,18 +1,25 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Icon, Modal, Spinner, copyText, fmtDate, useToast } from '../components/ui'
 import { renderMarkdown } from '../lib/markdown'
-import { acceptDocument, addDocument, deleteDocument, listDocuments, updateDocument, type ClientDocument } from '../lib/project'
+import { acceptDocument, addDocument, deleteDocument, listDocumentNotes, listDocuments, updateDocument, type ClientDocument } from '../lib/project'
 import type { Client } from '../lib/types'
 import { signedUrls } from '../lib/workspace'
 import { Empty, Field, Toggle } from './bits'
 
-export default function Documents({ client, isAdmin }: { client: Client; isAdmin: boolean }) {
+export default function Documents({ client, isAdmin, adminTools }: { client: Client; isAdmin: boolean; adminTools?: ReactNode }) {
   const toast = useToast()
   const [docs, setDocs] = useState<ClientDocument[] | null>(null)
   const [adding, setAdding] = useState(false)
   const [reading, setReading] = useState<ClientDocument | null>(null)
 
-  const load = useCallback(async () => setDocs(await listDocuments(client.id)), [client.id])
+  const load = useCallback(async () => {
+    const list = await listDocuments(client.id)
+    if (isAdmin) {
+      const notes = await listDocumentNotes(client.id).catch(() => ({}) as Record<string, string>)
+      list.forEach((d) => (d.admin_note = notes[d.id] ?? null))
+    }
+    setDocs(list)
+  }, [client.id, isAdmin])
   useEffect(() => {
     load().catch((e) => toast((e as Error).message))
   }, [load, toast])
@@ -36,45 +43,10 @@ export default function Documents({ client, isAdmin }: { client: Client; isAdmin
       toast((e as Error).message)
     }
   }
-  const commands: Array<[string, string, string]> = [
-    [
-      'Dla obecnej strony',
-      'Szybkie zabezpieczenie prawne strony, która działa teraz, na czas projektowania nowej.',
-      `Przygotuj dokumenty prawne dla obecnej strony klienta ${client.slug} (NAFU Brief).`,
-    ],
-    [
-      'Dla nowej strony',
-      'Pełny komplet dokumentów pod nowy projekt.',
-      `Przygotuj dokumenty prawne dla nowej strony klienta ${client.slug} (NAFU Brief).`,
-    ],
-  ]
 
   return (
     <div className="ws">
-      {isAdmin && (
-        <div className="script-note">
-          <div>
-            <strong>Dokumenty prawne przygotujesz w Claude, z Twoimi skillami prawnymi</strong>
-            <p>
-              Skopiuj polecenie i wklej je w Claude (projekt nafu-brief). Claude pobierze ankietę prawną, profil, salony, zespół i usługi klienta, przygotuje szkice na Twoich skillach i doda je tutaj jako <b>szkice widoczne tylko dla Ciebie</b>. Po sprawdzeniu klikasz „Udostępnij klientowi”.
-            </p>
-            <div className="cmd-list">
-              {commands.map(([label, hint, cmd]) => (
-                <div className="cmd" key={label}>
-                  <div>
-                    <strong>{label}</strong>
-                    <span className="muted">{hint}</span>
-                    <code className="script-code">{cmd}</code>
-                  </div>
-                  <button className="btn btn-sm btn-primary" onClick={() => copyText(cmd).then(() => toast('Skopiowano polecenie'))}>
-                    <Icon name="copy" size={15} /> Kopiuj
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {adminTools}
 
       {isAdmin && (
         <div className="ws-savebar">
@@ -86,7 +58,7 @@ export default function Documents({ client, isAdmin }: { client: Client; isAdmin
       )}
 
       {docs.length === 0 ? (
-        <Empty title={isAdmin ? 'Brak dokumentów' : 'Tu znajdziesz dokumenty'} text={isAdmin ? 'Dodaj umowę albo przygotuj dokumenty prawne w Claude.' : 'Umowa i dokumenty do Twojej strony pojawią się tutaj. Dostaniesz ode mnie wiadomość.'} />
+        <Empty title={isAdmin ? 'Brak dokumentów' : 'Tu znajdziesz dokumenty'} text={isAdmin ? 'Dodaj umowę albo przygotuj dokumenty prawne.' : 'Umowa i dokumenty do Twojej strony pojawią się tutaj. Dostaniesz ode mnie wiadomość.'} />
       ) : (
         <div className="card">
           {docs.map((d) => (
@@ -110,6 +82,12 @@ export default function Documents({ client, isAdmin }: { client: Client; isAdmin
                   <span>dodano {fmtDate(d.created_at)}</span>
                 </div>
                 {d.note && <p className="muted" style={{ margin: '6px 0 0', fontSize: 14 }}>{d.note}</p>}
+                {isAdmin && d.admin_note && (
+                  <p className="admin-note">
+                    <strong>Notatka wewnętrzna (klient jej nie widzi):</strong> {d.admin_note}
+                  </p>
+                )}
+                {isAdmin && d.content?.includes('[DO UZUPEŁNIENIA') && <span className="badge in_progress" style={{ marginTop: 6 }}>Są miejsca do uzupełnienia</span>}
               </div>
               <div className="actions">
                 <button className="btn btn-sm" onClick={() => openFile(d)}>
@@ -125,6 +103,9 @@ export default function Documents({ client, isAdmin }: { client: Client; isAdmin
                     <button
                       className={`btn btn-sm ${d.visible ? '' : 'btn-primary'}`}
                       onClick={async () => {
+                        if (!d.visible && d.content?.includes('[DO UZUPEŁNIENIA')) {
+                          if (!confirm('W treści są jeszcze znaczniki [DO UZUPEŁNIENIA]. Klient je zobaczy. Udostępnić mimo to?')) return
+                        }
                         await updateDocument(d.id, { visible: !d.visible })
                         toast(d.visible ? 'Ukryto przed klientem' : 'Udostępniono klientowi')
                         load()
@@ -165,8 +146,9 @@ export default function Documents({ client, isAdmin }: { client: Client; isAdmin
           doc={reading}
           isAdmin={isAdmin}
           onClose={() => setReading(null)}
-          onSaved={async (content) => {
-            await updateDocument(reading.id, { content })
+          onSaved={async (content, title) => {
+            await updateDocument(reading.id, { content, title })
+            setReading({ ...reading, content, title })
             toast('Zapisano zmiany')
             load()
           }}
@@ -224,9 +206,10 @@ function AddDoc({ onClose, onSave }: { onClose: () => void; onSave: (title: stri
   )
 }
 
-function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDocument; isAdmin: boolean; onClose: () => void; onSaved: (c: string) => Promise<void>; onAccept?: () => void }) {
+function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDocument; isAdmin: boolean; onClose: () => void; onSaved: (c: string, title: string) => Promise<void>; onAccept?: () => void }) {
   const [edit, setEdit] = useState(false)
   const [text, setText] = useState(doc.content ?? '')
+  const [title, setTitle] = useState(doc.title)
   return (
     <div className="viewer">
       <div className="viewer-bar">
@@ -234,7 +217,7 @@ function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDo
         <span className="spacer" />
         {isAdmin && (
           <button className="btn btn-sm" onClick={async () => {
-            if (edit) await onSaved(text)
+            if (edit) await onSaved(text, title.trim() || doc.title)
             setEdit(!edit)
           }}>
             {edit ? 'Zapisz' : <><Icon name="edit" size={15} /> Edytuj</>}
@@ -253,6 +236,12 @@ function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDo
         </button>
       </div>
       <div className="doc-read">
+        {edit && (
+          <label className="field">
+            <span className="label">Tytuł dokumentu (widzi go klient)</span>
+            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+        )}
         {edit ? (
           <textarea className="textarea" style={{ minHeight: '70vh', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 13.5 }} value={text} onChange={(e) => setText(e.target.value)} />
         ) : (

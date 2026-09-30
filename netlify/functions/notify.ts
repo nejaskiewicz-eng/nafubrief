@@ -20,12 +20,13 @@ export const handler: Handler = async (event) => {
   const db = createClient(url, anon, { global: { headers: { Authorization: `Bearer ${token}` } } })
   const { data: b } = await db
     .from('briefs')
-    .select('title, status, submitted_at, clients(name, company)')
+    .select('title, status, submitted_at')
     .eq('id', briefId)
-    .single<{ title: string; status: string; submitted_at: string | null; clients: { name: string; company: string | null } | null }>()
+    .single<{ title: string; status: string; submitted_at: string | null }>()
   if (!b || b.status !== 'submitted' || !b.submitted_at) return { statusCode: 204, body: '' }
   if (Date.now() - new Date(b.submitted_at).getTime() > 5 * 60 * 1000) return { statusCode: 204, body: '' }
-  const clientName = b.clients?.company || b.clients?.name || 'Klient'
+  const { data: me } = await db.rpc('my_client')
+  const clientName = (me as { company?: string; name?: string } | null)?.company || (me as { name?: string } | null)?.name || 'Klient'
 
   const site = process.env.URL || ''
   const res = await fetch('https://api.resend.com/emails', {

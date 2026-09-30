@@ -273,6 +273,8 @@ export interface ClientDocument {
   client_id: string
   title: string
   note: string | null
+  /** tylko dla administratorki (osobna tabela document_notes) */
+  admin_note?: string | null
   file_id: string | null
   content: string | null
   kind: string
@@ -298,6 +300,11 @@ export async function addDocument(
       .from('client_documents')
       .insert({ client_id: clientId, title, file_id: f.id, requires_acceptance: opts.requiresAcceptance, visible: opts.visible, note: opts.note || null }),
   )
+}
+/** Administratorka: notatki wewnętrzne do dokumentów klienta */
+export async function listDocumentNotes(clientId: string): Promise<Record<string, string>> {
+  const { data } = await sb().from('document_notes').select('document_id, body').eq('client_id', clientId)
+  return Object.fromEntries((data ?? []).map((n: { document_id: string; body: string }) => [n.document_id, n.body]))
 }
 export async function updateDocument(id: string, patch: Partial<Pick<ClientDocument, 'title' | 'note' | 'content' | 'visible' | 'requires_acceptance'>>) {
   must(await sb().from('client_documents').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))

@@ -3371,3 +3371,13 @@ h3 {
     align-items: stretch;
   }
 }
+
+.admin-note {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--warn-50);
+  border: 1px solid #f4e0b4;
+  font-size: 13.5px;
+  color: #5c4507;
+}

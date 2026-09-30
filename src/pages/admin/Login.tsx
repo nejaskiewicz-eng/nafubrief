@@ -67,7 +67,7 @@ export default function Login({ variant = 'admin' }: { variant?: 'admin' | 'clie
               <h1>
                 Briefy klientów <em>w jednym</em> miejscu.
               </h1>
-              <p>Ankiety, odpowiedzi i podsumowania AI dla każdego projektu.</p>
+              <p>Ankiety, materiały i przebieg każdego projektu.</p>
             </>
           )}
         </div>

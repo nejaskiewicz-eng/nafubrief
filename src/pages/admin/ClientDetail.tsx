@@ -9,6 +9,7 @@ import { surveyProgress } from '../../lib/format'
 import { renderMarkdown } from '../../lib/markdown'
 import type { Brief, Client, Summary, TemplateKey } from '../../lib/types'
 import { TemplatePicker } from './Dashboard'
+import { deleteSummary, listSummaries, requestSummary } from '../../lib/adminApi'
 import { isDemo } from '../../lib/supabase'
 import { unreadCount } from '../../lib/workspace'
 import Access from '../../workspace/Access'
@@ -16,6 +17,8 @@ import Documents from '../../workspace/Documents'
 import Media from '../../workspace/Media'
 import Preview from '../../workspace/Preview'
 import Start from '../../workspace/Start'
+import { TEMPLATES } from '../../templates'
+import LegalCommands from './LegalCommands'
 import Messages from '../../workspace/Messages'
 import Profile from '../../workspace/Profile'
 import Services from '../../workspace/Services'
@@ -94,10 +97,10 @@ export default function ClientDetail() {
       </div>
 
       {tab === 'briefs' && <BriefsTab client={client} briefs={briefs} reload={reload} />}
-      {tab === 'start' && <Start client={client} briefs={briefs} isAdmin onBriefsChanged={reload} onGo={(t) => setTab(t === 'start' ? 'start' : (t as Tab))} />}
+      {tab === 'start' && <Start client={client} briefs={briefs} isAdmin templates={TEMPLATES.map((t) => ({ key: t.key, title: t.title }))} onBriefsChanged={reload} onGo={(t) => setTab(t === 'start' ? 'start' : (t as Tab))} />}
       {tab === 'podglad' && <Preview client={client} isAdmin />}
       {tab === 'dostepy' && <Access clientId={client.id} isAdmin />}
-      {tab === 'dokumenty' && <Documents client={client} isAdmin />}
+      {tab === 'dokumenty' && <Documents client={client} isAdmin adminTools={<LegalCommands client={client} />} />}
       {tab === 'profil' && <Profile clientId={client.id} />}
       {tab === 'media' && <Media clientId={client.id} />}
       {tab === 'zespol' && <Team clientId={client.id} />}
@@ -565,7 +568,7 @@ function AiTab({ client, briefs }: { client: Client; briefs: Brief[] }) {
   const poll = useRef<number>(undefined)
 
   const load = useCallback(async () => {
-    const s = await api.listSummaries(client.id)
+    const s = await listSummaries(client.id)
     setList(s)
     setActiveId((cur) => cur ?? s[0]?.id ?? null)
     clearTimeout(poll.current)
@@ -582,7 +585,7 @@ function AiTab({ client, briefs }: { client: Client; briefs: Brief[] }) {
 
   const run = async () => {
     try {
-      const id = await api.requestSummary(client.id, instructions)
+      const id = await requestSummary(client.id, instructions)
       setActiveId(id)
       toast('Agent AI pracuje, to potrwa 1-3 minuty')
       await load()
@@ -670,7 +673,7 @@ function AiTab({ client, briefs }: { client: Client; briefs: Brief[] }) {
                   aria-label="Usuń podsumowanie"
                   onClick={async () => {
                     if (!confirm('Usunąć to podsumowanie?')) return
-                    await api.deleteSummary(s.id)
+                    await deleteSummary(s.id)
                     if (s.id === activeId) setActiveId(null)
                     load()
                   }}

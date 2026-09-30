@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { StatusBadge } from '../components/ui'
 import { api } from '../lib/api'
-import { TEMPLATES } from '../templates'
 import type { TemplateKey } from '../lib/types'
 import { Icon, Spinner, useToast } from '../components/ui'
 import {
@@ -60,7 +59,7 @@ async function computeGaps(client: Client, briefs: Brief[]): Promise<Gap[]> {
 }
 
 export default function Start({
-  client, briefs, isAdmin, onGo, onBriefsChanged,
+  client, briefs, isAdmin, onGo, onBriefsChanged, templates = [],
 }: {
   client: Client
   briefs: Brief[]
@@ -69,6 +68,8 @@ export default function Start({
   onGo?: (tab: WsTab) => void
   /** administratorka: po dodaniu lub przepięciu ankiety */
   onBriefsChanged?: () => Promise<void> | void
+  /** administratorka: szablony do dodania nowej ankiety do etapu */
+  templates?: Array<{ key: TemplateKey; title: string }>
 }) {
   const toast = useToast()
   const [steps, setSteps] = useState<Step[] | null>(null)
@@ -160,6 +161,7 @@ export default function Start({
                       client={client}
                       briefs={briefs}
                       isAdmin={isAdmin}
+                      templates={templates}
                       onChanged={onBriefsChanged}
                     />
                     {isAdmin && s.status !== 'current' && (
@@ -301,8 +303,9 @@ export default function Start({
 
 /** Ankiety przypisane do etapu: klient widzi i wypełnia, administratorka dodaje i przepina */
 function StepBriefs({
-  step, steps, client, briefs, isAdmin, onChanged,
+  step, steps, client, briefs, isAdmin, onChanged, templates,
 }: {
+  templates: Array<{ key: TemplateKey; title: string }>
   step: Step
   steps: Step[]
   client: Client
@@ -382,8 +385,8 @@ function StepBriefs({
                   ))}
                 </optgroup>
               )}
-              <optgroup label="Nowa ankieta z szablonu">
-                {TEMPLATES.map((t) => (
+              <optgroup label="Nowa ankieta">
+                {templates.map((t) => (
                   <option key={t.key} value={`new:${t.key}`}>
                     {t.title}
                   </option>
