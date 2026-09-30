@@ -24,6 +24,7 @@ export interface Step {
   position: number
 }
 export const DEFAULT_STEPS = [
+  'Wprowadzenie do projektu',
   'Brief i materiały',
   'Koncept i key visual',
   'Projekt strony na roboczym podglądzie',

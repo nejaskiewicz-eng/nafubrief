@@ -94,7 +94,7 @@ export default function ClientDetail() {
       </div>
 
       {tab === 'briefs' && <BriefsTab client={client} briefs={briefs} reload={reload} />}
-      {tab === 'start' && <Start client={client} briefs={briefs} isAdmin onGo={(t) => setTab(t === 'start' ? 'start' : (t as Tab))} />}
+      {tab === 'start' && <Start client={client} briefs={briefs} isAdmin onBriefsChanged={reload} onGo={(t) => setTab(t === 'start' ? 'start' : (t as Tab))} />}
       {tab === 'podglad' && <Preview client={client} isAdmin />}
       {tab === 'dostepy' && <Access clientId={client.id} isAdmin />}
       {tab === 'dokumenty' && <Documents client={client} isAdmin />}

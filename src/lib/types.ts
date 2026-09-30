@@ -108,6 +108,8 @@ export interface Brief {
   position: number
   /** pilna: klient widzi ją wyróżnioną i na górze listy */
   urgent: boolean
+  /** etap harmonogramu, do którego należy ankieta */
+  step_id: string | null
   opened_at: string | null
   submitted_at: string | null
   created_at: string

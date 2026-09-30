@@ -1,11 +1,19 @@
 ---
 name: dokumenty-prawne
-description: Przygotowuje szkice dokumentów prawnych na stronę klienta NAFU Brief (polityka prywatności, cookies, regulamin, klauzule RODO, zgody, deklaracja dostępności, skrócone standardy ochrony małoletnich) na podstawie ankiety prawnej i profilu klienta z panelu, z użyciem skilli prawnych Natalii. Używaj, gdy Natalia napisze „Przygotuj dokumenty prawne dla klienta <adres-klienta>” albo poprosi o dokumenty prawne dla klienta z panelu.
+description: Przygotowuje szkice dokumentów prawnych dla obecnej albo nowej strony klienta NAFU Brief (polityka prywatności, cookies, regulamin, klauzule RODO, zgody, deklaracja dostępności, skrócone standardy ochrony małoletnich) na podstawie ankiety prawnej i profilu klienta z panelu, z użyciem skilli prawnych Natalii. Używaj, gdy Natalia napisze „Przygotuj dokumenty prawne dla obecnej strony klienta <adres-klienta>”, „…dla nowej strony klienta…” albo poprosi o dokumenty prawne dla klienta z panelu.
 ---
 
 # Dokumenty prawne dla klienta NAFU Brief
 
 Natalia prowadzi NAFU Design (jednoosobowa pracownia). Panel NAFU Brief działa na Supabase, projekt `kqkqufxpxwqhujglhxej`. Dane klienta czytasz i szkice zapisujesz narzędziami Supabase (`execute_sql`).
+
+## 0. Ustal tryb
+
+- **Obecna strona** („dla obecnej strony”): klient nie ma żadnych dokumentów, a jego dotychczasowa strona działa w trakcie projektu. Cel: szybko i realnie zabezpieczyć firmę na ten okres. Dokumenty opisują to, co działa **teraz**: obecną domenę, obecne formularze, narzędzia i cookies faktycznie osadzone na obecnej stronie, obecny sposób kontaktu i rezerwacji. Nie opisuj funkcji planowanych dopiero na nowej stronie. Jeśli możesz, obejrzyj obecną stronę (adres z ankiety technicznej `t1_domain` lub z danych klienta) i sprawdź, jakie narzędzia i formularze naprawdę na niej są. Na końcu podaj krótką instrukcję, gdzie na obecnej stronie umieścić dokumenty (stopka, formularze, baner cookies).
+- **Nowa strona** („dla nowej strony”): pełny komplet pod nowy projekt, zgodnie z planowanymi funkcjami z briefu, ankiety technicznej i usług.
+- Jeśli tryb nie jest podany, zapytaj Natalię.
+
+Tytuły szkiców oznaczaj trybem, np. „Polityka prywatności (obecna strona)”, żeby oba komplety mogły istnieć obok siebie.
 
 ## 1. Pobierz dane klienta
 

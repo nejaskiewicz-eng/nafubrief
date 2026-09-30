@@ -3296,3 +3296,78 @@ h3 {
     gap: 2px;
   }
 }
+
+.st-briefs {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.st-brief {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 14px;
+}
+.st-brief svg {
+  color: var(--teal-700);
+}
+.st-brief-title {
+  font-weight: 600;
+  flex: 1;
+  min-width: 140px;
+}
+.st-move {
+  width: auto;
+  max-width: 230px;
+  padding: 5px 30px 5px 10px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}
+.st-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.st-add .select {
+  max-width: 340px;
+  padding: 7px 34px 7px 12px;
+  font-size: 14px;
+}
+.st-add-btn {
+  justify-self: start;
+  margin-left: -10px;
+}
+
+.cmd-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+.cmd {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--teal-100);
+}
+.cmd > div {
+  display: grid;
+  gap: 4px;
+}
+.cmd .muted {
+  font-size: 13.5px;
+}
+@media (max-width: 760px) {
+  .cmd {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

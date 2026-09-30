@@ -91,6 +91,7 @@ function load(): DemoDB {
       answers: {},
       status: 'sent',
       urgent: k === 'legal',
+      step_id: null,
       token: uuid(),
       slug: BRIEF_SLUG[k],
       opened_at: null,
@@ -199,7 +200,7 @@ export const api = {
         db.clients.push(c)
         templates.forEach((k, i) =>
           db.briefs.push({
-            ...newBriefFromTemplate(k, i), id: uuid(), client_id: c.id, answers: {}, status: 'draft', urgent: false,
+            ...newBriefFromTemplate(k, i), id: uuid(), client_id: c.id, answers: {}, status: 'draft', urgent: false, step_id: null,
             token: uuid(), slug: briefSlug(db, c.id, k), opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
@@ -265,21 +266,21 @@ export const api = {
       })
     return must(await sb().from('briefs').select('*').eq('id', id).single())
   },
-  async addBriefs(clientId: string, keys: TemplateKey[]) {
+  async addBriefs(clientId: string, keys: TemplateKey[], stepId?: string) {
     const existing = await api.listBriefs(clientId)
-    const rows = keys.map((k, i) => ({ ...newBriefFromTemplate(k, existing.length + i), client_id: clientId }))
+    const rows = keys.map((k, i) => ({ ...newBriefFromTemplate(k, existing.length + i), client_id: clientId, ...(stepId ? { step_id: stepId } : {}) }))
     if (isDemo)
       return demo((db) => {
         rows.forEach((r) =>
           db.briefs.push({
-            ...r, id: uuid(), answers: {}, status: 'draft', urgent: false, token: uuid(), slug: briefSlug(db, clientId, r.template_key),
+            ...r, step_id: (r as { step_id?: string }).step_id ?? null, id: uuid(), answers: {}, status: 'draft', urgent: false, token: uuid(), slug: briefSlug(db, clientId, r.template_key),
             opened_at: null, submitted_at: null, created_at: now(), updated_at: now(),
           }),
         )
       })
     must(await sb().from('briefs').insert(rows))
   },
-  async updateBrief(id: string, patch: Partial<Pick<Brief, 'title' | 'description' | 'intro' | 'schema' | 'status' | 'position' | 'answers' | 'submitted_at' | 'urgent'>>) {
+  async updateBrief(id: string, patch: Partial<Pick<Brief, 'title' | 'description' | 'intro' | 'schema' | 'status' | 'position' | 'answers' | 'submitted_at' | 'urgent' | 'step_id'>>) {
     if (isDemo)
       return demo((db) => {
         Object.assign(db.briefs.find((x) => x.id === id)!, patch, { updated_at: now() })

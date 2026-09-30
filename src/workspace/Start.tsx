@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { StatusBadge } from '../components/ui'
+import { api } from '../lib/api'
+import { TEMPLATES } from '../templates'
+import type { TemplateKey } from '../lib/types'
 import { Icon, Spinner, useToast } from '../components/ui'
 import {
   addTask, deleteStep, deleteTask, listAccess, listDocuments, listReviews, listSteps, listTasks, saveStep, toggleTask,
@@ -56,13 +60,15 @@ async function computeGaps(client: Client, briefs: Brief[]): Promise<Gap[]> {
 }
 
 export default function Start({
-  client, briefs, isAdmin, onGo,
+  client, briefs, isAdmin, onGo, onBriefsChanged,
 }: {
   client: Client
   briefs: Brief[]
   isAdmin: boolean
   /** administratorka: przełączenie zakładki w kartotece */
   onGo?: (tab: WsTab) => void
+  /** administratorka: po dodaniu lub przepięciu ankiety */
+  onBriefsChanged?: () => Promise<void> | void
 }) {
   const toast = useToast()
   const [steps, setSteps] = useState<Step[] | null>(null)
@@ -123,7 +129,7 @@ export default function Start({
                   <strong>Wszystkie etapy zakończone</strong>
                 ) : (
                   <>
-                    Etap <strong>{Math.max(current, 0) + 1}</strong> z {steps.length}
+                    Obecny etap: <strong>{Math.max(current, 0)}. {steps[Math.max(current, 0)]?.title}</strong>
                   </>
                 )}
               </span>
@@ -135,7 +141,7 @@ export default function Start({
               {steps.map((s, i) => (
                 <li key={s.id} className={`st st-${s.status}`}>
                   <span className="st-dot" aria-hidden>
-                    {s.status === 'done' ? '✓' : i + 1}
+                    {s.status === 'done' ? '✓' : i}
                   </span>
                   <div className="st-card">
                     <div className="st-top">
@@ -148,6 +154,14 @@ export default function Start({
                         {s.note && <span>{s.note}</span>}
                       </div>
                     )}
+                    <StepBriefs
+                      step={s}
+                      steps={steps}
+                      client={client}
+                      briefs={briefs}
+                      isAdmin={isAdmin}
+                      onChanged={onBriefsChanged}
+                    />
                     {isAdmin && s.status !== 'current' && (
                       <button className="btn btn-ghost btn-sm st-set" onClick={() => setCurrent(i)}>
                         Ustaw jako obecny etap
@@ -176,7 +190,7 @@ export default function Start({
                 }}>
                   <Icon name="trash" size={15} />
                 </button>
-                <span className="muted" style={{ fontSize: 12 }}>{i + 1}</span>
+                <span className="muted" style={{ fontSize: 12 }}>{i}</span>
               </div>
             ))}
             <button className="btn btn-sm" style={{ justifySelf: 'start' }} onClick={async () => {
@@ -281,6 +295,110 @@ export default function Start({
           </details>
         )}
       </section>
+    </div>
+  )
+}
+
+/** Ankiety przypisane do etapu: klient widzi i wypełnia, administratorka dodaje i przepina */
+function StepBriefs({
+  step, steps, client, briefs, isAdmin, onChanged,
+}: {
+  step: Step
+  steps: Step[]
+  client: Client
+  briefs: Brief[]
+  isAdmin: boolean
+  onChanged?: () => Promise<void> | void
+}) {
+  const toast = useToast()
+  const [adding, setAdding] = useState(false)
+  const mine = briefs.filter((b) => b.step_id === step.id && (isAdmin || b.status !== 'draft'))
+  const others = briefs.filter((b) => b.step_id !== step.id)
+  if (!mine.length && !isAdmin) return null
+
+  const move = async (b: Brief, stepId: string | null) => {
+    try {
+      await api.updateBrief(b.id, { step_id: stepId })
+      await onChanged?.()
+    } catch (e) {
+      toast((e as Error).message)
+    }
+  }
+
+  return (
+    <div className="st-briefs">
+      {mine.map((b) => (
+        <div className="st-brief" key={b.id}>
+          <Icon name="doc" size={15} />
+          <span className="st-brief-title">{b.title}</span>
+          {b.urgent && b.status !== 'submitted' && <span className="badge urgent">Pilne</span>}
+          <StatusBadge status={b.status} />
+          {!isAdmin && b.status !== 'submitted' && (
+            <Link className="btn btn-primary btn-sm" to={`/${client.slug}/${b.slug}`}>
+              {b.status === 'in_progress' ? 'Kontynuuj' : 'Wypełnij'}
+            </Link>
+          )}
+          {isAdmin && (
+            <select className="select st-move" value={step.id} onChange={(e) => move(b, e.target.value || null)} aria-label="Przenieś do etapu">
+              {steps.map((x, i) => (
+                <option key={x.id} value={x.id}>
+                  Etap {i}: {x.title}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      ))}
+      {isAdmin &&
+        (adding ? (
+          <div className="st-add">
+            <select
+              className="select"
+              defaultValue=""
+              onChange={async (e) => {
+                const v = e.target.value
+                if (!v) return
+                try {
+                  if (v.startsWith('new:')) {
+                    await api.addBriefs(client.id, [v.slice(4) as TemplateKey], step.id)
+                    toast('Dodano ankietę jako szkic. Sprawdź pytania i zatwierdź ją w „Ankiety i dostęp”.')
+                  } else {
+                    await api.updateBrief(v, { step_id: step.id })
+                  }
+                  setAdding(false)
+                  await onChanged?.()
+                } catch (err) {
+                  toast((err as Error).message)
+                }
+              }}
+            >
+              <option value="">Wybierz ankietę…</option>
+              {others.length > 0 && (
+                <optgroup label="Przenieś ankietę klienta">
+                  {others.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.title}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Nowa ankieta z szablonu">
+                {TEMPLATES.map((t) => (
+                  <option key={t.key} value={`new:${t.key}`}>
+                    {t.title}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>
+              Anuluj
+            </button>
+          </div>
+        ) : (
+          <button className="btn btn-ghost btn-sm st-add-btn" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={14} /> Dodaj ankietę do etapu
+          </button>
+        ))}
     </div>
   )
 }
