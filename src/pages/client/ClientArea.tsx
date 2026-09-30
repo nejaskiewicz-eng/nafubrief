@@ -72,6 +72,10 @@ const TABS: Array<[string, string]> = [
 export function ClientChrome({ children, email, client }: { children: ReactNode; email: string; client: Client }) {
   const [unread, setUnread] = useState(0)
   const loc = useLocation()
+  const [menu, setMenu] = useState(false)
+  const section = loc.pathname.split('/')[2] ?? ''
+  const current = TABS.find(([p]) => p === section) ?? TABS[0]
+  useEffect(() => setMenu(false), [loc.pathname])
   useEffect(() => {
     unreadCount(client.id, false).then(setUnread).catch(() => {})
   }, [client.id, loc.pathname])
@@ -90,13 +94,27 @@ export function ClientChrome({ children, email, client }: { children: ReactNode;
             Strefa klienta
           </div>
           <h1>{client.company || client.name}</h1>
-          <nav className="cz-tabs" aria-label="Strefa klienta">
-            {TABS.map(([path, label]) => (
-              <NavLink key={path} to={`/${client.slug}${path ? `/${path}` : ''}`} end>
-                {label}
-                {path === 'wiadomosci' && unread > 0 && <span className="dotn">{unread}</span>}
-              </NavLink>
-            ))}
+          <nav className={`cz-nav${menu ? ' is-open' : ''}`} aria-label="Strefa klienta">
+            <button className="cz-menu-btn" aria-expanded={menu} onClick={() => setMenu(!menu)}>
+              <span className="cz-menu-icon" aria-hidden>
+                <i />
+                <i />
+                <i />
+              </span>
+              <span>
+                <small>Menu · {TABS.length} sekcji</small>
+                {current[1]}
+              </span>
+              {unread > 0 && current[0] !== 'wiadomosci' && <span className="dotn">{unread}</span>}
+            </button>
+            <div className="cz-tabs">
+              {TABS.map(([path, label]) => (
+                <NavLink key={path} to={`/${client.slug}${path ? `/${path}` : ''}`} end>
+                  {label}
+                  {path === 'wiadomosci' && unread > 0 && <span className="dotn">{unread}</span>}
+                </NavLink>
+              ))}
+            </div>
           </nav>
         </div>
       </header>
