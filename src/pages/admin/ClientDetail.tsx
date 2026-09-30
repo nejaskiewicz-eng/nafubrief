@@ -731,9 +731,15 @@ function DataTab({ client, onSaved }: { client: Client; onSaved: () => Promise<v
             type="button"
             className="btn btn-danger"
             onClick={async () => {
-              if (!confirm(`Usunąć klienta „${client.company || client.name}” wraz ze wszystkimi ankietami i odpowiedziami? Tej operacji nie można cofnąć.`)) return
-              await api.deleteClient(client.id)
-              nav('/panel')
+              if (!confirm(`Usunąć klienta „${client.company || client.name}” wraz ze wszystkimi ankietami, odpowiedziami, plikami i kontem logowania klienta? Tej operacji nie można cofnąć.`)) return
+              try {
+                // najpierw konto logowania klienta, żeby nie zostało bez firmy
+                if (client.user_id) await api.clientAccess('remove', client.id)
+                await api.deleteClient(client.id)
+                nav('/panel')
+              } catch (e) {
+                toast((e as Error).message)
+              }
             }}
           >
             <Icon name="trash" size={16} /> Usuń klienta
