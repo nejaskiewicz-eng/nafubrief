@@ -183,102 +183,115 @@ export async function deleteComment(id: string) {
   must(await sb().from('review_comments').delete().eq('id', id))
 }
 
-/* ---------- dostępy do kont ---------- */
+/* ---------- dostępy (wspólna lista klienta i administratorki) ---------- */
 
-export interface AccessService {
-  key: string
-  name: string
-  why: string
-  how: string[]
-}
 export const ADMIN_EMAIL = 'n.e.jaskiewicz@gmail.com'
-export const ACCESS_SERVICES: AccessService[] = [
-  {
-    key: 'google_business',
-    name: 'Profil Firmy w Google (wizytówka)',
-    why: 'Żeby zadbać o wizytówkę w Mapach Google: zdjęcia, godziny, wpisy i odpowiedzi na opinie.',
-    how: [
-      'Wejdź na business.google.com i wybierz swoją wizytówkę.',
-      'Kliknij „Menu” (trzy kropki) → „Ustawienia profilu firmy” → „Osoby i dostęp”.',
-      `Kliknij „Dodaj”, wpisz ${ADMIN_EMAIL} i wybierz rolę „Menedżer”.`,
-    ],
-  },
-  {
-    key: 'search_console',
-    name: 'Google Search Console',
-    why: 'Żeby przenieść stronę bez utraty pozycji w Google i śledzić widoczność.',
-    how: [
-      'Wejdź na search.google.com/search-console i wybierz swoją stronę.',
-      'Kliknij „Ustawienia” → „Użytkownicy i uprawnienia” → „Dodaj użytkownika”.',
-      `Wpisz ${ADMIN_EMAIL} i wybierz uprawnienia „Pełne”.`,
-    ],
-  },
-  {
-    key: 'analytics',
-    name: 'Google Analytics',
-    why: 'Żeby zachować statystyki odwiedzin i porównać wyniki po starcie nowej strony.',
-    how: [
-      'Wejdź na analytics.google.com, kliknij „Administracja” (koło zębate na dole).',
-      'W kolumnie „Konto” wybierz „Zarządzanie dostępem do konta” i kliknij „+”.',
-      `Dodaj ${ADMIN_EMAIL} z rolą „Administrator”.`,
-    ],
-  },
-  {
-    key: 'meta',
-    name: 'Facebook i Instagram (Meta Business Suite)',
-    why: 'Żeby połączyć stronę z profilami i przygotować spójne treści.',
-    how: [
-      'Wejdź na business.facebook.com → „Ustawienia” → „Osoby”.',
-      `Kliknij „Dodaj osoby”, wpisz ${ADMIN_EMAIL} i nadaj dostęp do strony na Facebooku i konta na Instagramie.`,
-      'Jeśli nie używasz Meta Business Suite, napisz do mnie, podpowiem inną drogę.',
-    ],
-  },
-  {
-    key: 'domain',
-    name: 'Domena (adres strony)',
-    why: 'Żeby podłączyć nową stronę pod Twój adres bez przerwy w działaniu strony i poczty.',
-    how: [
-      'Sprawdź, w jakiej firmie jest Twoja domena (np. home.pl, OVH, nazwa.pl).',
-      'W panelu tej firmy poszukaj opcji „Dostęp dla innej osoby”, „Delegacja” albo „Konto techniczne”.',
-      'Jeśli takiej opcji nie ma, napisz w Wiadomościach, ustalimy razem bezpieczny sposób. Nie wysyłaj hasła mailem.',
-    ],
-  },
-  {
-    key: 'hosting',
-    name: 'Hosting i poczta',
-    why: 'Żeby przenieść pocztę i stronę bez utraty wiadomości.',
-    how: [
-      'Sprawdź, gdzie jest Twoja poczta firmowa i obecna strona.',
-      'W panelu hostingu poszukaj opcji dodania użytkownika lub dostępu technicznego.',
-      'Jeśli jej nie ma, napisz w Wiadomościach, dobierzemy bezpieczny sposób.',
-    ],
-  },
-  {
-    key: 'booking',
-    name: 'System rezerwacji (np. Booksy, ZnanyLekarz)',
-    why: 'Żeby połączyć rezerwacje ze stroną.',
-    how: [
-      'Jeśli korzystasz z systemu rezerwacji, wpisz w notatce jego nazwę.',
-      'Większość systemów pozwala dodać pracownika lub współpracownika. Dodaj mnie z adresem ' + ADMIN_EMAIL + ' albo napisz, zrobimy to razem.',
-    ],
-  },
-]
+
+export type AccessKind = 'invite' | 'login'
+export type AccessStatus = 'todo' | 'done' | 'na'
 export interface AccessItem {
   id: string
   client_id: string
-  service: string
-  status: 'todo' | 'done' | 'na'
+  service: string | null
+  title: string
+  description: string | null
+  kind: AccessKind
+  status: AccessStatus
   note: string | null
+  step_id: string | null
+  urgent: boolean
+  position: number
+  created_by: 'admin' | 'client'
+  secret_id: string | null
+  created_at: string
 }
+export interface Credentials {
+  url: string
+  login: string
+  password: string
+  notes: string
+}
+
+/** Standardowy zestaw, który administratorka dodaje jednym kliknięciem */
+export const ACCESS_CATALOG: Array<{ key: string; title: string; kind: AccessKind; description: string }> = [
+  {
+    key: 'cms',
+    title: 'Panel do edycji obecnej strony (CMS)',
+    kind: 'login',
+    description: 'Adres panelu (np. twojastrona.pl/wp-admin), login i hasło. Potrzebne, żeby zabezpieczyć i przenieść treści z obecnej strony.',
+  },
+  {
+    key: 'google_business',
+    title: 'Profil Firmy w Google (wizytówka)',
+    kind: 'invite',
+    description: `Wejdź na business.google.com i wybierz wizytówkę. Kliknij „Menu” → „Ustawienia profilu firmy” → „Osoby i dostęp” → „Dodaj”. Wpisz ${ADMIN_EMAIL} i wybierz rolę „Menedżer”.`,
+  },
+  {
+    key: 'search_console',
+    title: 'Google Search Console',
+    kind: 'invite',
+    description: `Wejdź na search.google.com/search-console i wybierz stronę. „Ustawienia” → „Użytkownicy i uprawnienia” → „Dodaj użytkownika”. Wpisz ${ADMIN_EMAIL} z uprawnieniami „Pełne”.`,
+  },
+  {
+    key: 'analytics',
+    title: 'Google Analytics',
+    kind: 'invite',
+    description: `Wejdź na analytics.google.com → „Administracja” → „Zarządzanie dostępem do konta” → „+”. Dodaj ${ADMIN_EMAIL} z rolą „Administrator”.`,
+  },
+  {
+    key: 'meta',
+    title: 'Facebook i Instagram (Meta Business Suite)',
+    kind: 'invite',
+    description: `Wejdź na business.facebook.com → „Ustawienia” → „Osoby” → „Dodaj osoby”. Wpisz ${ADMIN_EMAIL} i nadaj dostęp do strony na Facebooku i konta na Instagramie.`,
+  },
+  {
+    key: 'domain',
+    title: 'Domena (adres strony)',
+    kind: 'login',
+    description: 'Firma, w której jest domena (np. home.pl, OVH), i dane do panelu albo informacja, kto nim zarządza.',
+  },
+  {
+    key: 'hosting',
+    title: 'Hosting i poczta',
+    kind: 'login',
+    description: 'Firma, w której jest serwer strony i poczta, oraz dane do panelu hostingu.',
+  },
+  {
+    key: 'booking',
+    title: 'System rezerwacji (np. Booksy, ZnanyLekarz)',
+    kind: 'login',
+    description: 'Nazwa systemu i dane do logowania albo zaproszenie mnie jako współpracownika.',
+  },
+]
+
 export async function listAccess(clientId: string): Promise<AccessItem[]> {
-  return must(await sb().from('access_items').select('*').eq('client_id', clientId))
+  return must(await sb().from('access_items').select('*').eq('client_id', clientId).order('urgent', { ascending: false }).order('position').order('created_at'))
 }
-export async function setAccess(clientId: string, service: string, patch: Partial<Pick<AccessItem, 'status' | 'note'>>) {
-  must(
-    await sb()
-      .from('access_items')
-      .upsert({ client_id: clientId, service, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'client_id,service' }),
-  )
+export async function addAccess(item: Partial<AccessItem> & { client_id: string; title: string }) {
+  must(await sb().from('access_items').insert(item))
+}
+export async function updateAccess(id: string, patch: Partial<Pick<AccessItem, 'title' | 'description' | 'kind' | 'status' | 'note' | 'step_id' | 'urgent' | 'position'>>) {
+  must(await sb().from('access_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))
+}
+export async function deleteAccess(id: string) {
+  must(await sb().from('access_items').delete().eq('id', id))
+}
+export async function addAccessFromCatalog(clientId: string, keys: string[], existing: AccessItem[]) {
+  const have = new Set(existing.map((e) => e.service))
+  const rows = ACCESS_CATALOG.filter((c) => keys.includes(c.key) && !have.has(c.key)).map((c, i) => ({
+    client_id: clientId, service: c.key, title: c.title, kind: c.kind, description: c.description, position: existing.length + i,
+  }))
+  if (rows.length) must(await sb().from('access_items').insert(rows))
+}
+/** Dane logowania: zapis i odczyt z zaszyfrowanego sejfu (Supabase Vault) */
+export async function getCredentials(id: string): Promise<Credentials | null> {
+  return must(await sb().rpc('get_access_credentials', { p_item: id }))
+}
+export async function setCredentials(id: string, c: Credentials) {
+  must(await sb().rpc('set_access_credentials', { p_item: id, p_url: c.url, p_login: c.login, p_password: c.password, p_notes: c.notes }))
+}
+export async function clearCredentials(id: string) {
+  must(await sb().rpc('clear_access_credentials', { p_item: id }))
 }
 
 /* ---------- dokumenty ---------- */

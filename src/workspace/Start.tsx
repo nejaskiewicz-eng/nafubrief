@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import type { TemplateKey } from '../lib/types'
 import {
   addTask, deleteStep, deleteTask, listAccess, listDocuments, listReviews, listSteps, listTasks, saveOrder, saveStep, toggleTask, updateTask,
-  ACCESS_SERVICES, type Step, type StepStatus, type Task,
+  type AccessItem, type Step, type StepStatus, type Task,
 } from '../lib/project'
 import type { Brief, Client } from '../lib/types'
 import { getProfile, listFiles, listServices, listTeam } from '../lib/workspace'
@@ -50,10 +50,12 @@ async function computeGaps(client: Client, briefs: Brief[]): Promise<Gap[]> {
   if (!team.length) gaps.push({ key: 'team', text: 'Dodaj osoby z zespołu', tab: 'zespol' })
   else if (team.some((m) => !m.photo_path)) gaps.push({ key: 'team-photo', text: 'Dodaj zdjęcia osób z zespołu', tab: 'zespol' })
   if (!services.length) gaps.push({ key: 'services', text: 'Dodaj usługi z cenami', tab: 'uslugi' })
-  const doneAccess = new Set(access.filter((a) => a.status !== 'todo').map((a) => a.service))
-  const missing = ACCESS_SERVICES.filter((s) => !doneAccess.has(s.key)).length
-  if (missing) gaps.push({ key: 'access', text: `Udostępnij mi dostępy do kont (zostało: ${missing})`, tab: 'dostepy' })
-  return gaps
+  access.filter((a) => a.status === 'todo' && a.urgent).forEach((a) =>
+    gaps.push({ key: `acc-${a.id}`, text: `${a.kind === 'login' ? 'Przekaż dane logowania' : 'Udostępnij dostęp'}: ${a.title}`, tab: 'dostepy', urgent: true }),
+  )
+  const missing = access.filter((a) => a.status === 'todo' && !a.urgent).length
+  if (missing) gaps.push({ key: 'access', text: `Udostępnij pozostałe dostępy (zostało: ${missing})`, tab: 'dostepy' })
+  return gaps.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent))
 }
 
 type Tpl = { key: TemplateKey; title: string }
@@ -85,12 +87,14 @@ export default function Start({
   const toast = useToast()
   const [steps, setSteps] = useState<Step[] | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
+  const [access, setAccess] = useState<AccessItem[]>([])
   const [gaps, setGaps] = useState<Gap[] | null>(null)
 
   const load = useCallback(async () => {
-    const [s, t] = await Promise.all([listSteps(client.id), listTasks(client.id)])
+    const [s, t, a] = await Promise.all([listSteps(client.id), listTasks(client.id), listAccess(client.id)])
     setSteps(s)
     setTasks(t)
+    setAccess(a)
     computeGaps(client, briefs).then(setGaps).catch(() => setGaps([]))
   }, [client, briefs])
 
@@ -154,6 +158,7 @@ export default function Start({
               briefs={briefs.filter((b) => b.step_id === s.id && (isAdmin || b.status !== 'draft')).sort((a, b) => a.step_position - b.step_position)}
               allBriefs={briefs}
               tasks={tasks.filter((t) => t.step_id === s.id)}
+              access={access.filter((a) => a.step_id === s.id)}
               templates={templates}
               run={run}
               onBriefsChanged={onBriefsChanged}
@@ -230,7 +235,7 @@ export default function Start({
 /* ------------------------------------------------------------------ */
 
 export function StepItem({
-  step, index, steps, client, isAdmin, briefs, allBriefs, tasks, templates, run, onBriefsChanged, onMove,
+  step, index, steps, client, isAdmin, briefs, allBriefs, tasks, access = [], templates, run, onBriefsChanged, onMove,
 }: {
   step: Step
   index: number
@@ -240,6 +245,7 @@ export function StepItem({
   briefs: Brief[]
   allBriefs: Brief[]
   tasks: Task[]
+  access?: AccessItem[]
   templates: Tpl[]
   run: (fn: () => Promise<unknown>) => Promise<void>
   onBriefsChanged?: () => Promise<void> | void
@@ -335,7 +341,7 @@ export function StepItem({
           </>
         )}
 
-        {(briefs.length > 0 || visibleTasks.length > 0 || isAdmin) && (
+        {(briefs.length > 0 || visibleTasks.length > 0 || access.length > 0 || isAdmin) && (
           <div className="st-items">
             {briefs.map((b, i) => (
               <div className="st-item" key={b.id}>
@@ -360,6 +366,22 @@ export function StepItem({
                     }}
                     onStep={(id) => briefChanged(() => api.updateBrief(b.id, { step_id: id, step_position: 999 }))}
                   />
+                )}
+              </div>
+            ))}
+
+            {access.map((a) => (
+              <div className="st-item" key={a.id}>
+                <Icon name="unlock" size={15} />
+                <span className="st-item-title">{a.title}</span>
+                {a.urgent && a.status === 'todo' && <span className="badge urgent">Pilne</span>}
+                <span className={`badge ${a.status === 'todo' ? 'in_progress' : a.status === 'done' ? 'submitted' : 'draft'}`}>
+                  {a.status === 'todo' ? 'Do przekazania' : a.status === 'done' ? 'Przekazane' : 'Nie dotyczy'}
+                </span>
+                {!isAdmin && a.status === 'todo' && (
+                  <Link className="btn btn-primary btn-sm" to={`/${client.slug}/dostepy`}>
+                    Przekaż
+                  </Link>
                 )}
               </div>
             ))}
