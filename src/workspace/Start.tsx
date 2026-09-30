@@ -85,6 +85,7 @@ export default function Start({
   if (!steps) return <Spinner />
 
   const current = steps.findIndex((s) => s.status === 'current')
+  const doneCount = steps.filter((s) => s.status === 'done').length
   const openTasks = tasks.filter((t) => !t.done_at)
   const doneTasks = tasks.filter((t) => t.done_at)
 
@@ -115,21 +116,48 @@ export default function Start({
           )}
         </div>
         {!editing ? (
-          <ol className="timeline">
-            {steps.map((s, i) => (
-              <li key={s.id} className={s.status}>
-                <button className="tl-dot" disabled={!isAdmin} onClick={() => isAdmin && setCurrent(i)} title={isAdmin ? 'Ustaw jako obecny etap' : undefined}>
-                  {s.status === 'done' ? '✓' : i + 1}
-                </button>
-                <div className="tl-body">
-                  <strong>{s.title}</strong>
-                  {s.status === 'current' && <span className="tl-now">Teraz</span>}
-                  {s.due_date && <span className="tl-date">do {fmtDay(s.due_date)}</span>}
-                  {s.note && <span className="tl-note">{s.note}</span>}
-                </div>
-              </li>
-            ))}
-          </ol>
+          <>
+            <div className="stepper-head">
+              <span>
+                {doneCount === steps.length ? (
+                  <strong>Wszystkie etapy zakończone</strong>
+                ) : (
+                  <>
+                    Etap <strong>{Math.max(current, 0) + 1}</strong> z {steps.length}
+                  </>
+                )}
+              </span>
+              <div className="progress" aria-hidden>
+                <span style={{ width: `${steps.length ? (doneCount / steps.length) * 100 : 0}%` }} />
+              </div>
+            </div>
+            <ol className="stepper">
+              {steps.map((s, i) => (
+                <li key={s.id} className={`st st-${s.status}`}>
+                  <span className="st-dot" aria-hidden>
+                    {s.status === 'done' ? '✓' : i + 1}
+                  </span>
+                  <div className="st-card">
+                    <div className="st-top">
+                      <strong>{s.title}</strong>
+                      <span className={`st-state is-${s.status}`}>{s.status === 'done' ? 'Zakończony' : s.status === 'current' ? 'W trakcie' : 'Przed nami'}</span>
+                    </div>
+                    {(s.due_date || s.note) && (
+                      <div className="st-meta">
+                        {s.due_date && <span>Termin: {fmtDay(s.due_date)}</span>}
+                        {s.note && <span>{s.note}</span>}
+                      </div>
+                    )}
+                    {isAdmin && s.status !== 'current' && (
+                      <button className="btn btn-ghost btn-sm st-set" onClick={() => setCurrent(i)}>
+                        Ustaw jako obecny etap
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </>
         ) : (
           <div className="stack" style={{ gap: 8, marginTop: 12 }}>
             {steps.map((s, i) => (
@@ -159,11 +187,7 @@ export default function Start({
             </button>
           </div>
         )}
-        {current >= 0 && !editing && (
-          <p className="muted" style={{ margin: '14px 0 0', fontSize: 14 }}>
-            {isAdmin ? 'Kliknij numer etapu, żeby ustawić go jako obecny.' : `Jesteśmy na etapie: ${steps[current].title}.`}
-          </p>
-        )}
+
       </section>
 
       {/* Do zrobienia */}

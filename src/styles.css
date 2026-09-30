@@ -2734,92 +2734,142 @@ h3 {
 
 /* ---------- start: harmonogram i zadania ---------- */
 
-.timeline {
+.stepper-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+  margin: 14px 0 18px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.stepper-head strong {
+  color: var(--ink);
+}
+.stepper {
   list-style: none;
-  margin: 18px 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0;
-  counter-reset: s;
 }
-.timeline li {
+.st {
   position: relative;
   display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: 8px;
-  padding: 0 6px;
+  grid-template-columns: 36px 1fr;
+  gap: 14px;
+  padding-bottom: 12px;
 }
-.timeline li::before {
+.st:last-child {
+  padding-bottom: 0;
+}
+/* linia łącząca etapy */
+.st::before {
   content: '';
   position: absolute;
-  top: 18px;
-  left: -50%;
-  right: 50%;
-  height: 3px;
+  left: 17px;
+  top: 36px;
+  bottom: 0;
+  width: 2px;
   background: var(--line);
-  z-index: 0;
 }
-.timeline li:first-child::before {
+.st:last-child::before {
   display: none;
 }
-.timeline li.done::before,
-.timeline li.current::before {
+.st.st-done::before {
   background: var(--teal);
 }
-.tl-dot {
+.st-dot {
   position: relative;
   z-index: 1;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
+  display: grid;
+  place-items: center;
   border: 2px solid var(--line-2);
   background: #fff;
   color: var(--muted);
   font: 400 15px/1 var(--display);
-  display: grid;
-  place-items: center;
-  cursor: default;
 }
-.tl-dot:not(:disabled) {
-  cursor: pointer;
-}
-.timeline li.done .tl-dot {
+.st.st-done .st-dot {
   background: var(--teal);
   border-color: var(--teal);
   color: #042028;
 }
-.timeline li.current .tl-dot {
+.st.st-current .st-dot {
   border-color: var(--teal);
   color: var(--teal-700);
   box-shadow: 0 0 0 5px rgba(2, 175, 202, 0.18);
 }
-.tl-body {
-  display: grid;
-  gap: 3px;
-  justify-items: center;
-  font-size: 13.5px;
+.st-card {
+  padding: 8px 14px 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  min-width: 0;
 }
-.tl-body strong {
+.st.st-current .st-card {
+  background: var(--teal-50);
+  border-color: var(--teal-100);
+}
+.st-top {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.st-top strong {
+  font-size: 15.5px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
 }
-.timeline li.todo .tl-body strong {
+.st.st-todo .st-top strong {
   color: var(--muted);
   font-weight: 500;
 }
-.tl-now {
-  font-size: 11px;
+.st-state {
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.st-state.is-current {
   color: var(--teal-700);
 }
-.tl-date,
-.tl-note {
-  font-size: 12px;
+.st-state.is-done {
+  color: var(--ok);
+}
+.st-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+  font-size: 13.5px;
   color: var(--muted);
+}
+.st-card {
+  position: relative;
+}
+.st-set {
+  position: absolute;
+  right: 110px;
+  top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  background: var(--surface) !important;
+}
+.st:hover .st-set,
+.st-set:focus-visible {
+  opacity: 1;
+}
+@media (hover: none), (max-width: 640px) {
+  .st-set {
+    position: static;
+    opacity: 1;
+    margin: 6px 0 0 -10px;
+  }
 }
 .step-edit {
   display: grid;
@@ -3237,5 +3287,12 @@ h3 {
   }
   .doc-read {
     padding: 0;
+  }
+}
+@media (max-width: 640px) {
+  .st-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
   }
 }
