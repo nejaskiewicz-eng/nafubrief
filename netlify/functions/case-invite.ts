@@ -55,14 +55,14 @@ export const handler: Handler = async (event) => {
 
   const site = (process.env.VITE_SITE_URL || process.env.URL || '').replace(/\/$/, '')
   const link = `${site}/${cl.slug}/sprawy?sprawa=${c.id}`
-  const { subject, html } = renderCaseInvite({
-    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: c.description, due: c.due_date, note, login: clientTo, link,
+  const { subject, html, text } = renderCaseInvite({
+    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: c.description, due: c.due_date, note, login: clientTo, link, site,
   })
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, reply_to: process.env.NOTIFY_EMAIL || undefined, subject: test ? `[TEST] ${subject}` : subject, html }),
+    body: JSON.stringify({ from, to, reply_to: process.env.NOTIFY_EMAIL || undefined, subject: test ? `[TEST] ${subject}` : subject, html, text }),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
@@ -72,7 +72,8 @@ export const handler: Handler = async (event) => {
   return json(200, { ok: true, to })
 }
 
-/** Treść e-maila zależna od formy zwracania się do klienta (na Ty albo oficjalnie) */
+/** Treść e-maila zależna od formy zwracania się do klienta (na Ty albo oficjalnie).
+ *  Układ tabelowy z wbudowanymi stylami (działa w Gmailu, Outlooku i Apple Mail) plus wersja tekstowa. */
 export function renderCaseInvite(p: {
   form: string | null
   salutation: string | null
@@ -83,36 +84,91 @@ export function renderCaseInvite(p: {
   note: string
   login: string
   link: string
+  site?: string
 }) {
   const ty = p.form === 'ty'
   const pron = p.form === 'pani' ? 'Pani' : p.form === 'pan' ? 'Pana' : 'Państwa'
   const sal = (p.salutation || '').trim()
   const para = (s: string) => esc(s).replace(/\n/g, '<br>')
+  const site = (p.site || 'https://nafu-design.com').replace(/\/$/, '')
+  const cat = p.priority === 'very_urgent' ? 'Bardzo pilne' : p.priority === 'urgent' ? 'Pilne' : ''
 
   const subject = ty ? `${sal ? `${sal}, n` : 'N'}owa sprawa w panelu: ${p.title}` : `Sprawa wymagająca ${pron} udziału: ${p.title}`
   const greet = ty ? (sal ? `Cześć ${esc(sal)}!` : 'Cześć!') : `Dzień dobry${sal ? ` ${esc(sal)}` : ''},`
-  const cat = p.priority === 'very_urgent' ? 'Bardzo pilne' : p.priority === 'urgent' ? 'Pilne' : ''
   const intro = ty
-    ? `W Twojej strefie klienta NAFU dodałam nową sprawę${cat ? `, z kategorii: <strong>${cat}</strong>` : ''}.`
-    : `w strefie klienta NAFU Design dodałam nową sprawę${cat ? ` z kategorii: <strong>${cat}</strong>` : ''}, w której potrzebuję ${pron} udziału.`
+    ? `W Twojej strefie klienta NAFU dodałam nową sprawę${cat ? ', z kategorii:' : '.'}`
+    : `w strefie klienta NAFU Design dodałam nową sprawę, w której potrzebuję ${pron} udziału${cat ? '. Kategoria:' : '.'}`
+  const cta = ty ? 'Otwórz sprawę' : 'Otwórz sprawę w panelu'
   const outro = ty
-    ? `W środku masz wszystko w jednym miejscu: zadania, pytania, dokumenty i naszą rozmowę. Logujesz się adresem ${esc(p.login)}. Jeśli przycisk nie zadziała, skopiuj link: ${esc(p.link)}`
-    : `W sprawie znajdują się zadania, pytania, dokumenty i nasza korespondencja. Proszę zalogować się adresem ${esc(p.login)}. Jeśli przycisk nie działa, proszę skopiować link: ${esc(p.link)}`
-  const sign = ty ? 'Pozdrawiam,<br>Nat' : 'Z pozdrowieniami,<br>Natalia Jaśkiewicz<br>NAFU Design'
+    ? `W środku masz wszystko w jednym miejscu: zadania, pytania, dokumenty i naszą rozmowę. Logujesz się adresem ${esc(p.login)}.`
+    : `W sprawie znajdują się zadania, pytania, dokumenty i nasza korespondencja. Proszę zalogować się adresem ${esc(p.login)}.`
+  const signHtml = ty
+    ? '<span style="font-size:15px;color:#0d2830">Pozdrawiam,</span><br><strong style="font-size:16px;color:#0d2830">Nat</strong>'
+    : '<span style="font-size:15px;color:#0d2830">Z pozdrowieniami,</span><br><strong style="font-size:16px;color:#0d2830">Natalia Jaśkiewicz</strong><br><span style="font-size:13px;color:#587079">NAFU Design</span>'
 
-  const html = `
-<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#0d2830;max-width:560px">
-  <p>${greet}</p>
-  <p>${intro}</p>
-  <p style="font-size:18px;font-weight:bold;margin:18px 0 6px">${esc(p.title)}</p>
-  ${p.description ? `<p style="margin:0 0 12px;color:#3b5560">${para(p.description)}</p>` : ''}
-  ${p.due ? `<p style="margin:0 0 12px"><strong>Termin:</strong> ${fmtDay(p.due)}</p>` : ''}
-  ${p.note ? `<p style="margin:0 0 12px;padding:12px 14px;background:#e6f7fa;border-radius:10px">${para(p.note)}</p>` : ''}
-  <p style="margin:22px 0">
-    <a href="${p.link}" style="background:#0a7189;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold;display:inline-block">Otwórz sprawę</a>
-  </p>
-  <p style="font-size:13px;color:#587079">${outro}</p>
-  <p>${sign}</p>
-</div>`
-  return { subject, html }
+  const F = "font-family:'DM Sans',Arial,Helvetica,sans-serif"
+  const pill = cat
+    ? `<span style="display:inline-block;padding:4px 12px;border-radius:999px;background:${cat === 'Bardzo pilne' ? '#fde8e6' : '#fdf4e1'};color:${cat === 'Bardzo pilne' ? '#b42318' : '#9a6700'};font-size:13px;font-weight:700;letter-spacing:.2px">${cat}</span>`
+    : ''
+
+  const html = `<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only"><title>${esc(subject)}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=swap" rel="stylesheet"></head>
+<body style="margin:0;padding:0;background:#eef4f6">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(p.title)}${cat ? ` · ${cat}` : ''}${p.due ? ` · termin ${fmtDay(p.due)}` : ''}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef4f6">
+<tr><td align="center" style="padding:28px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
+
+<tr><td style="background:#072129;border-radius:18px 18px 0 0;padding:26px 32px">
+  <img src="${site}/brand/email/logo.png" width="120" alt="NAFU design" style="display:block;border:0;height:auto">
+  <div style="${F};margin-top:14px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#02afca;font-weight:700">Strefa klienta</div>
+</td></tr>
+
+<tr><td style="background:#ffffff;padding:32px;${F};font-size:15px;line-height:1.6;color:#0d2830">
+  <p style="margin:0 0 14px;font-size:18px;font-weight:700">${greet}</p>
+  <p style="margin:0 0 ${cat ? '10px' : '22px'}">${intro}</p>
+  ${pill ? `<p style="margin:0 0 22px">${pill}</p>` : ''}
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4fafb;border:1px solid #d9ecf0;border-left:4px solid #02afca;border-radius:12px">
+  <tr><td style="padding:18px 20px;${F}">
+    <div style="font-size:19px;font-weight:700;line-height:1.35;color:#072129">${esc(p.title)}</div>
+    ${p.due ? `<div style="margin-top:6px;font-size:14px;color:#0a7189;font-weight:700">Termin: ${fmtDay(p.due)}</div>` : ''}
+    ${p.description ? `<div style="margin-top:10px;font-size:14.5px;line-height:1.6;color:#3b5560">${para(p.description)}</div>` : ''}
+  </td></tr></table>
+
+  ${p.note ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr>
+    <td width="52" valign="top" style="padding-right:12px"><img src="${site}/brand/email/natalia.png" width="44" height="44" alt="Natalia" style="display:block;border-radius:50%;border:0"></td>
+    <td valign="top" style="background:#e6f7fa;border-radius:4px 14px 14px 14px;padding:14px 16px;${F};font-size:15px;line-height:1.6;color:#0d2830">${para(p.note)}</td>
+  </tr></table>` : ''}
+
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 8px"><tr>
+    <td style="border-radius:999px;background:#0a7189">
+      <a href="${p.link}" style="display:inline-block;padding:14px 30px;${F};font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:999px">${cta} &rarr;</a>
+    </td></tr></table>
+  <p style="margin:0 0 26px;font-size:13px;line-height:1.55;color:#587079">${outro}</p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" style="border-top:1px solid #e3ecef;padding-top:20px;width:100%"><tr>
+    <td width="60" valign="middle" style="padding-top:20px"><img src="${site}/brand/email/natalia.png" width="48" height="48" alt="" style="display:block;border-radius:50%;border:0"></td>
+    <td valign="middle" style="padding-top:20px;${F};line-height:1.4">${signHtml}</td>
+  </tr></table>
+</td></tr>
+
+<tr><td style="background:#ffffff;border-radius:0 0 18px 18px;padding:0 32px 26px;${F};font-size:12px;line-height:1.5;color:#8aa0a7">
+  NAFU Design · <a href="${site}" style="color:#0a7189;text-decoration:none">nafu-design.com</a><br>
+  ${ty ? 'Ta wiadomość dotyczy współpracy przy Twoim projekcie. Odpowiedz na nią, a trafi bezpośrednio do mnie.' : 'Wiadomość dotyczy współpracy przy projekcie. Odpowiedź na nią trafi bezpośrednio do mnie.'}
+</td></tr>
+
+</table></td></tr></table>
+</body></html>`
+
+  const strip = (x: string) => x.replace(/<br>/g, '\n').replace(/<[^>]+>/g, '').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+  const text = [
+    strip(greet), '', strip(intro) + (cat ? ` ${cat}` : ''), '', p.title + (p.due ? `\nTermin: ${fmtDay(p.due)}` : ''),
+    p.description ? `\n${p.description}` : '', p.note ? `\n${p.note}` : '',
+    '', `${cta}: ${p.link}`, '', strip(outro), '', ty ? 'Pozdrawiam,\nNat' : 'Z pozdrowieniami,\nNatalia Jaśkiewicz\nNAFU Design',
+  ].join('\n').replace(/\n{3,}/g, '\n\n')
+
+  return { subject, html, text }
 }
