@@ -4015,3 +4015,42 @@ body.is-sorting * {
   color: #fff;
   font-weight: 600;
 }
+
+/* sprawy: sekcje jako kroki, domyślnie zwinięte */
+.ws.case {
+  counter-reset: krok;
+}
+.case-step-title {
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+.case-step-no {
+  counter-increment: krok;
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #e6f7fa;
+  color: var(--teal, #0a7189);
+  font: 700 11.5px/1.6 var(--font);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.case-step-no::before {
+  content: 'Krok ' counter(krok);
+}
+.case-step-toggle {
+  flex: none;
+  align-self: flex-start;
+}
+.case-step:not(.open) .case-sec > :not(.case-sec-head) {
+  display: none;
+}
+.case-step:not(.open) .case-sec-tools {
+  display: none;
+}
+.case-step:not(.open) .case-sec {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}

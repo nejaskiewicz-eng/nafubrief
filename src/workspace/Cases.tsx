@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../components/ui'
 import { api } from '../lib/api'
@@ -306,7 +306,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
                 <Closing c={c} isAdmin={isAdmin} run={run} />
               ),
             }
-            return <Fragment key={k}>{el[k]}</Fragment>
+            return <CaseStep key={`${c.id}-${k}`}>{el[k]}</CaseStep>
           })}
         </>
       )}
@@ -338,14 +338,33 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   )
 }
 
+/** Sekcja sprawy jako krok: startuje zwinięta, numer kroku liczy CSS (tylko sekcje faktycznie pokazane) */
+const StepCtx = createContext<{ open: boolean; toggle: () => void } | null>(null)
+
+function CaseStep({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`case-step${open ? ' open' : ''}`}>
+      <StepCtx.Provider value={{ open, toggle: () => setOpen((o) => !o) }}>{children}</StepCtx.Provider>
+    </div>
+  )
+}
+
 function SecHead({ title, hint, children }: { title: string; hint?: string; children?: ReactNode }) {
+  const step = useContext(StepCtx)
   return (
     <div className="case-sec-head">
-      <div>
+      <div className={step ? 'case-step-title' : undefined} onClick={step?.toggle} role={step ? 'button' : undefined}>
+        {step && <span className="case-step-no" />}
         <h3>{title}</h3>
         {hint && <p className="muted">{hint}</p>}
       </div>
-      {children && <div className="row">{children}</div>}
+      {children && <div className="row case-sec-tools">{children}</div>}
+      {step && (
+        <button className="btn btn-sm case-step-toggle" onClick={step.toggle} aria-expanded={step.open}>
+          {step.open ? 'Zwiń' : 'Rozwiń'} <Icon name={step.open ? 'up' : 'down'} size={14} />
+        </button>
+      )}
     </div>
   )
 }
@@ -383,12 +402,8 @@ function LinkExisting({ label, load, onPick }: { label: string; load: () => Prom
 /* ---------- zadania ---------- */
 
 function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client; c: Case; tasks: Task[]; isAdmin: boolean; locked: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
-  const [title, setTitle] = useState('')
-  const [note, setNote] = useState('')
-  const [due, setDue] = useState('')
-  const [assignee, setAssignee] = useState<'client' | 'nafu'>('client')
-  const [visible, setVisible] = useState(true)
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
   if (!isAdmin && tasks.length === 0) return null
   const done = tasks.filter((t) => t.done_at).length
 
@@ -410,42 +425,30 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
       </SecHead>
 
       {adding && (
-        <div className="case-form">
-          <Field label="Zadanie" value={title} onChange={setTitle} placeholder="np. Sprawdzić personel w Rejestrze Sprawców i KRK" />
-          <Field label="Opis (widzi klient, jeśli zadanie jest widoczne)" value={note} onChange={setNote} textarea />
-          <div className="row">
-            <div className="seg" role="radiogroup" aria-label="Kto wykonuje">
-              <button className={assignee === 'client' ? 'on' : ''} onClick={() => setAssignee('client')}>
-                Klient
-              </button>
-              <button className={assignee === 'nafu' ? 'on' : ''} onClick={() => setAssignee('nafu')}>
-                Ja
-              </button>
-            </div>
-            <input className="input st-date" type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Termin" />
-            <Toggle checked={visible} onChange={setVisible} label="Widoczne dla klienta" />
-            <span className="spacer" />
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={!title.trim()}
-              onClick={async () => {
-                await run(
-                  () => addTask({ client_id: client.id, case_id: c.id, title: title.trim(), note: note.trim() || null, due_date: due || null, assignee, visible, position: tasks.length }),
-                  'Dodano zadanie',
-                )
-                setTitle('')
-                setNote('')
-                setDue('')
-                setAdding(false)
-              }}
-            >
-              Dodaj
-            </button>
-          </div>
-        </div>
+        <TaskForm
+          submitLabel="Dodaj"
+          onCancel={() => setAdding(false)}
+          onSave={async (v) => {
+            await run(() => addTask({ client_id: client.id, case_id: c.id, ...v, position: tasks.length }), 'Dodano zadanie')
+            setAdding(false)
+          }}
+        />
       )}
 
       {tasks.map((t) => {
+        if (editing === t.id)
+          return (
+            <TaskForm
+              key={t.id}
+              initial={t}
+              submitLabel="Zapisz"
+              onCancel={() => setEditing(null)}
+              onSave={async (v) => {
+                await run(() => updateTask(t.id, v), 'Zapisano zadanie')
+                setEditing(null)
+              }}
+            />
+          )
         const canTick = !locked && (isAdmin || t.assignee === 'client')
         return (
           <div key={t.id} className={`st-item task${t.done_at ? ' done' : ''}${!t.visible ? ' hidden-task' : ''}`}>
@@ -466,6 +469,11 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
             {t.done_at && <span className="muted" style={{ fontSize: 12.5 }}>potwierdzone {fmtDate(t.done_at)}</span>}
             {isAdmin && (
               <span className="st-item-tools">
+                {!locked && (
+                  <button className="btn btn-ghost btn-icon" aria-label="Edytuj zadanie" title="Edytuj" onClick={() => setEditing(t.id)}>
+                    <Icon name="edit" size={14} />
+                  </button>
+                )}
                 <button className="btn btn-ghost btn-sm" onClick={() => run(() => updateTask(t.id, { visible: !t.visible }))}>
                   {t.visible ? 'Ukryj' : 'Pokaż klientowi'}
                 </button>
@@ -481,6 +489,54 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
         )
       })}
     </section>
+  )
+}
+
+type TaskValues = Pick<Task, 'title' | 'note' | 'due_date' | 'assignee' | 'visible'>
+
+/** Formularz zadania: dodawanie i edycja */
+function TaskForm({ initial, submitLabel, onSave, onCancel }: { initial?: Task; submitLabel: string; onSave: (v: TaskValues) => Promise<void>; onCancel: () => void }) {
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [note, setNote] = useState(initial?.note ?? '')
+  const [due, setDue] = useState(initial?.due_date ?? '')
+  const [assignee, setAssignee] = useState<'client' | 'nafu'>(initial?.assignee ?? 'client')
+  const [visible, setVisible] = useState(initial?.visible ?? true)
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="case-form">
+      <Field label="Zadanie" value={title} onChange={setTitle} placeholder="np. Sprawdzić personel w Rejestrze Sprawców i KRK" />
+      <Field label="Opis (widzi klient, jeśli zadanie jest widoczne)" value={note} onChange={setNote} textarea />
+      <div className="row">
+        <div className="seg" role="radiogroup" aria-label="Kto wykonuje">
+          <button className={assignee === 'client' ? 'on' : ''} onClick={() => setAssignee('client')}>
+            Klient
+          </button>
+          <button className={assignee === 'nafu' ? 'on' : ''} onClick={() => setAssignee('nafu')}>
+            Ja
+          </button>
+        </div>
+        <input className="input st-date" type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Termin" />
+        <Toggle checked={visible} onChange={setVisible} label="Widoczne dla klienta" />
+        <span className="spacer" />
+        <button className="btn btn-sm" onClick={onCancel}>
+          Anuluj
+        </button>
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={!title.trim() || busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await onSave({ title: title.trim(), note: note.trim() || null, due_date: due || null, assignee, visible })
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {submitLabel}
+        </button>
+      </div>
+    </div>
   )
 }
 
