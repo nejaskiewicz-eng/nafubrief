@@ -4,7 +4,7 @@ import { CONTACT, Loading } from '../../components/ui'
 import { api, type Session } from '../../lib/api'
 import type { Client } from '../../lib/types'
 import { unreadCount } from '../../lib/workspace'
-import { caseUnread } from '../../lib/cases'
+import { caseUnread, notifyClientVisit, touchPanel } from '../../lib/cases'
 import Access from '../../workspace/Access'
 import Cases from '../../workspace/Cases'
 import Documents from '../../workspace/Documents'
@@ -42,6 +42,15 @@ export default function ClientArea() {
   useEffect(() => {
     load()
   }, [load])
+
+  // wejście klienta do panelu: powiadomienie dla administratorki (raz na wizytę) i sygnał obecności co minutę
+  const realClient = ctx?.session?.role === 'client' && !ctx.session.preview ? ctx.mine?.id : undefined
+  useEffect(() => {
+    if (!realClient) return
+    notifyClientVisit()
+    const t = setInterval(() => document.visibilityState === 'visible' && touchPanel(), 60_000)
+    return () => clearInterval(t)
+  }, [realClient])
 
   if (!ctx) return <Loading />
   // pierwsze logowanie albo hasło nadane przez administratorkę: najpierw własne hasło

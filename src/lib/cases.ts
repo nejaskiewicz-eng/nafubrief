@@ -258,6 +258,40 @@ export function touchCase(caseId: string) {
 export async function listCaseActivity(caseId: string, limit = 100): Promise<CaseActivity[]> {
   return must(await sb().from('case_activity').select('*').eq('case_id', caseId).eq('from_admin', false).order('created_at', { ascending: false }).limit(limit))
 }
+/** Nowe wpisy dziennika na żywo (Realtime), bez cyklicznego odpytywania. Zwraca funkcję kończącą nasłuch. */
+export function watchCaseActivity(caseId: string, onEvent: () => void): () => void {
+  try {
+    const client = sb()
+    const ch = client
+      .channel(`case-activity-${caseId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'case_activity', filter: `case_id=eq.${caseId}` }, () => onEvent())
+      .subscribe()
+    return () => {
+      void client.removeChannel(ch)
+    }
+  } catch {
+    return () => {}
+  }
+}
+/** Klient wchodzi do panelu: baza zapisuje obecność, a przy nowej wizycie administratorka dostaje e-mail. */
+export async function notifyClientVisit() {
+  try {
+    const { data } = await sb().auth.getSession()
+    const token = data.session?.access_token
+    if (!token) return
+    await fetch('/.netlify/functions/client-visit', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+  } catch {
+    /* powiadomienie nie może zepsuć pracy w panelu */
+  }
+}
+/** Sygnał obecności klienta w panelu */
+export function touchPanel() {
+  try {
+    void sb().rpc('client_panel_touch').then(() => {}, () => {})
+  } catch {
+    /* bez znaczenia dla pracy w panelu */
+  }
+}
 export async function caseSeenAt(caseId: string): Promise<string | null> {
   const { data } = await sb().from('cases').select('client_seen_at').eq('id', caseId).single()
   return (data as { client_seen_at: string | null } | null)?.client_seen_at ?? null

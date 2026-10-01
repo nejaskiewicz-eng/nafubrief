@@ -4,7 +4,7 @@ import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../compone
 import { api } from '../lib/api'
 import { renderMarkdown } from '../lib/markdown'
 import {
-  CASE_BADGE, CASE_STATUS, CASE_TYPES, PRIORITY_LABEL, SECTIONS, caseSeenAt, caseType, caseTypeLabel, listCaseActivity, logActivity, touchCase, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
+  CASE_BADGE, CASE_STATUS, CASE_TYPES, PRIORITY_LABEL, SECTIONS, caseSeenAt, caseType, caseTypeLabel, listCaseActivity, logActivity, touchCase, watchCaseActivity, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
   type Case, type CaseActivity, type CaseItems, type CaseMessage, type CasePriority, type CaseSection, type CaseTip,
 } from '../lib/cases'
@@ -491,39 +491,50 @@ function describeActivity(a: CaseActivity): string {
 }
 const filled = (v: unknown) => (Array.isArray(v) ? v.length > 0 : typeof v === 'object' && v !== null ? Object.keys(v).length > 0 : v !== null && v !== undefined && String(v).trim() !== '')
 
-/** Podgląd na żywo: obecność klienta, postęp i dziennik zdarzeń. Odświeża się co 15 sekund. */
+/** Podgląd na żywo: obecność klienta, postęp i dziennik zdarzeń. Nic nie odpytuje w tle: panel reaguje na nowe wpisy klienta,
+ *  a obecność sprawdza tylko wtedy, gdy klient jest w sprawie. */
 function ActivityPanel({ c, items, reload }: { c: Case; items: CaseItems; reload: () => Promise<void> }) {
   const [rows, setRows] = useState<CaseActivity[] | null>(null)
   const [seen, setSeen] = useState<string | null>(c.client_seen_at ?? null)
   const [all, setAll] = useState(false)
   const [, setTick] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const seenRef = useRef(seen)
+  seenRef.current = seen
+  const isOnline = (s: string | null) => !!s && Date.now() - new Date(s).getTime() < 100_000
+
+  const load = useCallback(async () => {
+    try {
+      const [r, s] = await Promise.all([listCaseActivity(c.id), caseSeenAt(c.id)])
+      setRows(r)
+      setSeen(s)
+    } catch {
+      /* przy błędzie zostaje poprzedni stan */
+    }
+  }, [c.id])
 
   useEffect(() => {
-    let alive = true
-    const load = async () => {
-      try {
-        const [r, s] = await Promise.all([listCaseActivity(c.id), caseSeenAt(c.id)])
-        if (!alive) return
-        setRows(r)
-        setSeen(s)
-        setTick((n) => n + 1)
-      } catch {
-        /* przy błędzie zostaje poprzedni stan */
-      }
-    }
     load()
-    const t = setInterval(() => {
-      if (document.visibilityState !== 'visible') return
+    // nowy wpis klienta w dzienniku: odśwież dziennik i elementy sprawy (postęp ankiety, zadania, dokumenty)
+    const stop = watchCaseActivity(c.id, () => {
       load()
       reload().catch(() => {})
-    }, 15_000)
+    })
+    // obecność: dopóki klient jest w sprawie, co 45 sekund sprawdzamy, czy nadal jest; gdy go nie ma, nic nie pobieramy
+    const t = setInterval(() => {
+      if (isOnline(seenRef.current) && document.visibilityState === 'visible') {
+        caseSeenAt(c.id).then(setSeen, () => {})
+        reload().catch(() => {})
+      }
+      setTick((n) => n + 1)
+    }, 45_000)
     return () => {
-      alive = false
+      stop()
       clearInterval(t)
     }
-  }, [c.id, reload])
+  }, [c.id, load, reload])
 
-  const online = !!seen && Date.now() - new Date(seen).getTime() < 100_000
+  const online = isOnline(seen)
   const briefs = items.briefs.filter((b) => b.status !== 'draft')
   const tasks = items.tasks.filter((t) => t.assignee === 'client' && t.visible)
   const access = items.access.filter((a) => a.status !== 'na')
@@ -542,7 +553,20 @@ function ActivityPanel({ c, items, reload }: { c: Case; items: CaseItems; reload
             {online ? 'Klient jest teraz w tej sprawie' : seen ? `Ostatnio w sprawie: ${fmtDate(seen)}` : 'Klient jeszcze nie otworzył tej sprawy'}
           </h3>
         </div>
-        <span className="muted" style={{ fontSize: 12.5 }}>odświeża się co 15 sekund</span>
+        <div className="row">
+          <span className="muted" style={{ fontSize: 12.5 }}>{online ? 'monitoruję na bieżąco' : 'włączy się, gdy klient wejdzie do sprawy'}</span>
+          <button
+            className="btn btn-sm"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              await Promise.all([load(), reload().catch(() => {})])
+              setBusy(false)
+            }}
+          >
+            Odśwież
+          </button>
+        </div>
       </div>
       <div className="live-stats">
         {briefs.map((b) => {
