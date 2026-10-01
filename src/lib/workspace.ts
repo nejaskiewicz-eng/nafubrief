@@ -82,6 +82,8 @@ export interface ClientFile {
   size: number | null
   note: string | null
   member_id: string | null
+  /** kto dodał: true pracownia, false klient (ustawia baza) */
+  from_admin?: boolean
   created_at: string
 }
 

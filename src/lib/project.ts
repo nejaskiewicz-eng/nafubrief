@@ -316,6 +316,8 @@ export interface ClientDocument {
   case_id?: string | null
   requires_acceptance: boolean
   accepted_at: string | null
+  /** kto dodał: true pracownia, false klient (ustawia baza) */
+  from_admin?: boolean
   created_at: string
   updated_at: string
   file?: ClientFile | null

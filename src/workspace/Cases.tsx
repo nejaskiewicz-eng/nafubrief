@@ -9,7 +9,7 @@ import {
 } from '../lib/cases'
 import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateDocument, updateTask, type Task } from '../lib/project'
 import type { Brief, Client } from '../lib/types'
-import { deleteFile, fmtSize, signedUrls, type ClientFile } from '../lib/workspace'
+import { deleteFile, fmtSize, signedUrls, updateFile, type ClientFile } from '../lib/workspace'
 import Access from './Access'
 import { Empty, Field, Toggle } from './bits'
 import Documents from './Documents'
@@ -272,7 +272,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
               ),
               documents: (
                 <section className="card case-sec">
-                <SecHead title="Dokumenty" hint={isAdmin ? 'Szkice są widoczne tylko dla Ciebie, dopóki ich nie udostępnisz.' : 'Przeczytaj i zaakceptuj dokumenty przygotowane w tej sprawie.'} />
+                <SecHead title="Dokumenty" hint={isAdmin ? 'Dokumenty w tej sprawie z obu stron. Szkice są widoczne tylko dla Ciebie, dopóki ich nie udostępnisz. Klient też może dodawać.' : 'Dokumenty w tej sprawie: ode mnie i od Ciebie.'} />
                 {isAdmin && !locked && (
                   <LinkExisting
                     label="Podepnij dokument"
@@ -280,7 +280,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
                     onPick={(id) => run(() => linkItem('client_documents', id, c.id), 'Podpięto dokument')}
                   />
                 )}
-                <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="other" key={`d-${items.documents.length}`} />
+                <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="other" locked={locked} key={`d-${items.documents.length}`} />
               </section>
               ),
               access: (
@@ -1205,6 +1205,7 @@ function MediaBlock({ c, isAdmin, locked }: { c: Case; isAdmin: boolean; locked:
   const [linking, setLinking] = useState(false)
   const [linkName, setLinkName] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
+  const [editing, setEditing] = useState<{ id: string; name: string; note: string } | null>(null)
   const input = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -1276,8 +1277,16 @@ function MediaBlock({ c, isAdmin, locked }: { c: Case; isAdmin: boolean; locked:
       )}
 
       {files.length === 0 && !linking && <p className="muted" style={{ margin: 0 }}>Brak materiałów w tej sprawie.</p>}
+      {[
+        { key: 'studio', title: isAdmin ? 'Dodane przeze mnie' : 'Od Natalii', list: files.filter((f) => f.from_admin !== false) },
+        { key: 'client', title: isAdmin ? 'Dodane przez klienta' : 'Dodane przez Ciebie', list: files.filter((f) => f.from_admin === false) },
+      ].filter((g) => g.list.length > 0).map((g) => (
+      <div key={g.key} className="doc-group">
+      <div className={`doc-group-title ${g.key}`}>
+        {g.title} <span className="muted">({g.list.length})</span>
+      </div>
       <div className="case-media">
-        {files.map((f) => {
+        {g.list.map((f) => {
           const src = f.path ? urls[f.path] : null
           const isImg = f.mime?.startsWith('image/')
           const isVid = f.mime?.startsWith('video/')
@@ -1300,30 +1309,68 @@ function MediaBlock({ c, isAdmin, locked }: { c: Case; isAdmin: boolean; locked:
                   <span>{f.name}</span>
                 </a>
               )}
+              {editing?.id === f.id ? (
+                <figcaption>
+                  <Field label="Nagłówek" value={editing.name} onChange={(v) => setEditing({ ...editing, name: v })} />
+                  <Field label="Opis" value={editing.note} onChange={(v) => setEditing({ ...editing, note: v })} textarea />
+                  <div className="case-media-meta">
+                    <span />
+                    <button className="link-btn" onClick={() => setEditing(null)}>
+                      anuluj
+                    </button>
+                    <button
+                      className="link-btn"
+                      disabled={!editing.name.trim()}
+                      onClick={async () => {
+                        try {
+                          await updateFile(f.id, { name: editing.name.trim(), note: editing.note.trim() || null })
+                          setEditing(null)
+                          await load()
+                        } catch (e) {
+                          toast((e as Error).message)
+                        }
+                      }}
+                    >
+                      zapisz
+                    </button>
+                  </div>
+                </figcaption>
+              ) : (
               <figcaption>
-                <span title={f.name}>{f.name}</span>
-                <span className="muted">{f.size ? fmtSize(f.size) : ''}</span>
-                {(isAdmin || !locked) && (
-                  <button
-                    className="link-btn"
-                    onClick={async () => {
-                      if (!confirm(`Usunąć „${f.name}”?`)) return
-                      try {
-                        await deleteFile(f)
-                        await load()
-                      } catch (e) {
-                        toast((e as Error).message)
-                      }
-                    }}
-                  >
-                    usuń
-                  </button>
-                )}
+                <strong className="case-media-title">{f.name}</strong>
+                {f.note && <p className="case-media-note">{f.note}</p>}
+                <div className="case-media-meta">
+                  <span className="muted">{f.size ? fmtSize(f.size) : ''}</span>
+                  {(isAdmin || (!locked && f.from_admin === false)) && (
+                    <>
+                      <button className="link-btn" onClick={() => setEditing({ id: f.id, name: f.name, note: f.note ?? '' })}>
+                        opisz
+                      </button>
+                      <button
+                        className="link-btn"
+                        onClick={async () => {
+                          if (!confirm(`Usunąć „${f.name}”?`)) return
+                          try {
+                            await deleteFile(f)
+                            await load()
+                          } catch (e) {
+                            toast((e as Error).message)
+                          }
+                        }}
+                      >
+                        usuń
+                      </button>
+                    </>
+                  )}
+                </div>
               </figcaption>
+              )}
             </figure>
           )
         })}
       </div>
+      </div>
+      ))}
     </section>
   )
 }

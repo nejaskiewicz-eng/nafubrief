@@ -7,7 +7,7 @@ import { signedUrls } from '../lib/workspace'
 import { Empty, Field, Toggle } from './bits'
 
 export default function Documents({
-  client, isAdmin, adminTools, caseId, onChanged, only,
+  client, isAdmin, adminTools, caseId, onChanged, only, locked,
 }: {
   client: Client
   isAdmin: boolean
@@ -17,6 +17,8 @@ export default function Documents({
   onChanged?: () => void
   /** w sprawie: tylko umowy ('contract') albo wszystko poza umowami ('other') */
   only?: 'contract' | 'other'
+  /** sprawa zamknięta: klient nie dodaje ani nie usuwa */
+  locked?: boolean
 }) {
   const toast = useToast()
   const [docs, setDocs] = useState<ClientDocument[] | null>(null)
@@ -59,9 +61,28 @@ export default function Documents({
     }
   }
 
+  // w sprawie dokumenty dodają obie strony; rozdzielamy je na dodane przez pracownię i przez klienta
+  const bothSides = !!caseId && only !== 'contract'
+  const clientCanAdd = bothSides && !isAdmin && !locked
+  const groups = bothSides
+    ? [
+        { key: 'studio', title: isAdmin ? 'Dodane przeze mnie' : 'Od Natalii', list: docs.filter((d) => d.from_admin !== false) },
+        { key: 'client', title: isAdmin ? 'Dodane przez klienta' : 'Dodane przez Ciebie', list: docs.filter((d) => d.from_admin === false) },
+      ].filter((g) => g.list.length > 0)
+    : [{ key: 'all', title: '', list: docs }]
+
   return (
     <div className="ws">
       {!caseId && adminTools}
+
+      {clientCanAdd && (
+        <div className="ws-savebar">
+          <span className="muted" style={{ fontSize: 14 }}>Tu dodasz własne dokumenty do tej sprawy, na przykład umowę, faktury albo raporty.</span>
+          <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={15} /> Dodaj dokument
+          </button>
+        </div>
+      )}
 
       {isAdmin && (
         <div className="ws-savebar">
@@ -83,17 +104,26 @@ export default function Documents({
         <Empty title={isAdmin ? 'Brak dokumentów' : 'Tu znajdziesz dokumenty'} text={isAdmin ? 'Dodaj umowę albo przygotuj dokumenty prawne.' : 'Umowa i dokumenty do Twojej strony pojawią się tutaj. Dostaniesz ode mnie wiadomość.'} />
         )
       ) : (
+        groups.map((g) => (
+        <div key={g.key} className="doc-group">
+        {g.title && (
+          <div className={`doc-group-title ${g.key}`}>
+            {g.title} <span className="muted">({g.list.length})</span>
+          </div>
+        )}
         <div className="card">
-          {docs.map((d) => (
+          {g.list.map((d) => {
+            const fromClient = d.from_admin === false
+            return (
             <div className="brief-row" key={d.id}>
-              <div className="brief-icon" style={{ background: d.visible ? 'linear-gradient(135deg,#0a7189,#02afca)' : '#8aa0a7' }}>
+              <div className="brief-icon" style={{ background: fromClient ? 'linear-gradient(135deg,#b7791f,#e0a84a)' : d.visible ? 'linear-gradient(135deg,#0a7189,#02afca)' : '#8aa0a7' }}>
                 <Icon name="doc" size={20} />
               </div>
               <div style={{ minWidth: 0 }}>
                 <h3>{d.title}</h3>
                 <div className="meta">
                   {isAdmin && !d.visible && <span className="badge draft">Szkic, widoczny tylko dla Ciebie</span>}
-                  {d.requires_acceptance ? (
+                  {fromClient ? null : d.requires_acceptance ? (
                     d.accepted_at ? (
                       <span className="badge submitted">Zaakceptowany {fmtDate(d.accepted_at)}</span>
                     ) : (
@@ -104,8 +134,23 @@ export default function Documents({
                   )}
                   <span>dodano {fmtDate(d.created_at)}</span>
                 </div>
-                {isAdmin ? (
+                {isAdmin && fromClient ? (
+                  <>
+                    {d.note && (
+                      <div className="doc-note doc-note-client">
+                        <strong>Opis od klienta:</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{d.note}</span>
+                      </div>
+                    )}
+                    <DocNotes doc={d} onChanged={load} kinds={['internal']} />
+                  </>
+                ) : isAdmin ? (
                   <DocNotes doc={d} onChanged={load} />
+                ) : fromClient ? (
+                  d.note && (
+                    <div className="doc-note doc-note-client">
+                      <span style={{ whiteSpace: 'pre-wrap' }}>{d.note}</span>
+                    </div>
+                  )
                 ) : (
                   d.note && (
                     <div className="doc-note doc-note-client">
@@ -124,7 +169,37 @@ export default function Documents({
                     ✓ Akceptuję
                   </button>
                 )}
-                {isAdmin && (
+                {!isAdmin && fromClient && !locked && (
+                  <button
+                    className="btn btn-sm btn-danger"
+                    aria-label="Usuń dokument"
+                    onClick={async () => {
+                      if (!confirm(`Usunąć „${d.title}”?`)) return
+                      try {
+                        await deleteDocument(d.id)
+                        load()
+                      } catch (e) {
+                        toast((e as Error).message)
+                      }
+                    }}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                )}
+                {isAdmin && fromClient && (
+                  <button
+                    className="btn btn-sm btn-danger"
+                    aria-label="Usuń dokument"
+                    onClick={async () => {
+                      if (!confirm(`Usunąć „${d.title}”? To dokument dodany przez klienta.`)) return
+                      await deleteDocument(d.id)
+                      load()
+                    }}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                )}
+                {isAdmin && !fromClient && (
                   <>
                     <button
                       className={`btn btn-sm ${d.visible ? '' : 'btn-primary'}`}
@@ -153,16 +228,23 @@ export default function Documents({
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
+        </div>
+        ))
       )}
 
       {adding && (
         <AddDoc
+          asClient={!isAdmin}
           onClose={() => setAdding(false)}
           onSave={async (title, file, requires, visible, note) => {
-            await addDocument(client.id, title, file, { requiresAcceptance: requires, visible, note, caseId, kind: only === 'contract' ? 'contract' : undefined })
+            await addDocument(client.id, title, file, isAdmin
+              ? { requiresAcceptance: requires, visible, note, caseId, kind: only === 'contract' ? 'contract' : undefined }
+              : { requiresAcceptance: false, visible: true, note, caseId })
             setAdding(false)
+            if (!isAdmin) toast('Dodano dokument')
             load()
           }}
         />
@@ -185,7 +267,7 @@ export default function Documents({
   )
 }
 
-function AddDoc({ onClose, onSave }: { onClose: () => void; onSave: (title: string, file: File, requires: boolean, visible: boolean, note: string) => Promise<void> }) {
+function AddDoc({ onClose, onSave, asClient }: { onClose: () => void; onSave: (title: string, file: File, requires: boolean, visible: boolean, note: string) => Promise<void>; asClient?: boolean }) {
   const toast = useToast()
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
@@ -198,7 +280,7 @@ function AddDoc({ onClose, onSave }: { onClose: () => void; onSave: (title: stri
       <div className="eyebrow">Dokumenty</div>
       <h2 style={{ marginTop: 8, marginBottom: 14 }}>Dodaj dokument</h2>
       <div className="stack">
-        <Field label="Nazwa" value={title} onChange={setTitle} placeholder="np. Umowa na wykonanie strony" />
+        <Field label="Nazwa" value={title} onChange={setTitle} placeholder={asClient ? 'np. Umowa z agencją' : 'np. Umowa na wykonanie strony'} />
         <label className="field">
           <span className="label">Plik (najlepiej PDF)</span>
           <input className="input" type="file" accept="application/pdf,.doc,.docx,image/*" onChange={(e) => {
@@ -207,9 +289,9 @@ function AddDoc({ onClose, onSave }: { onClose: () => void; onSave: (title: stri
             if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, ''))
           }} />
         </label>
-        <Field label="Opis dla klienta (opcjonalnie)" value={note} onChange={setNote} textarea />
-        <Toggle checked={requires} onChange={setRequires} label="Wymaga akceptacji klienta" />
-        <Toggle checked={visible} onChange={setVisible} label="Od razu widoczny dla klienta (wyłącz, żeby zapisać jako szkic)" />
+        <Field label={asClient ? 'Opis (opcjonalnie)' : 'Opis dla klienta (opcjonalnie)'} value={note} onChange={setNote} textarea />
+        {!asClient && <Toggle checked={requires} onChange={setRequires} label="Wymaga akceptacji klienta" />}
+        {!asClient && <Toggle checked={visible} onChange={setVisible} label="Od razu widoczny dla klienta (wyłącz, żeby zapisać jako szkic)" />}
       </div>
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
@@ -285,7 +367,7 @@ const NOTE_LABEL: Record<NoteKind, string> = {
 }
 
 /** Notatki do dokumentu: wewnętrzna (document_notes) i dla klienta (client_documents.note). Dodanie, edycja, zmiana rodzaju, usunięcie. */
-function DocNotes({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Promise<void> }) {
+function DocNotes({ doc, onChanged, kinds = ['internal', 'client'] }: { doc: ClientDocument; onChanged: () => Promise<void>; kinds?: NoteKind[] }) {
   const toast = useToast()
   const [editing, setEditing] = useState<{ from: NoteKind | null; kind: NoteKind; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -329,8 +411,8 @@ function DocNotes({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Pr
     }
   }
 
-  const shown = (['internal', 'client'] as NoteKind[]).filter((k) => value(k) && editing?.from !== k)
-  const free = (['internal', 'client'] as NoteKind[]).filter((k) => !value(k))
+  const shown = kinds.filter((k) => value(k) && editing?.from !== k)
+  const free = kinds.filter((k) => !value(k))
 
   // przełączenie rodzaju istniejącej notatki jednym kliknięciem
   const switchKind = async (from: NoteKind, to: NoteKind) => {
@@ -352,7 +434,7 @@ function DocNotes({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Pr
 
   const KindSwitch = ({ current, onPick }: { current: NoteKind; onPick: (k: NoteKind) => void }) => (
     <div className="note-kind" role="radiogroup" aria-label="Rodzaj notatki">
-      {(['internal', 'client'] as NoteKind[]).map((k) => (
+      {kinds.map((k) => (
         <button key={k} type="button" role="radio" aria-checked={current === k} disabled={busy} className={`note-kind-opt${current === k ? ' on' : ''}`} onClick={() => onPick(k)}>
           {k === 'internal' ? 'Wewnętrzna' : 'Dla klienta'}
         </button>
