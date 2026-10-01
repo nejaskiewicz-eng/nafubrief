@@ -211,6 +211,8 @@ export interface AccessItem {
   position: number
   created_by: 'admin' | 'client'
   secret_id: string | null
+  /** adres panelu logowania narzędzia (link przy pozycji) */
+  login_url?: string | null
   /** sprawa bieżąca, do której należy pozycja */
   case_id?: string | null
   created_at: string
@@ -223,7 +225,7 @@ export interface Credentials {
 }
 
 /** Standardowy zestaw, który administratorka dodaje jednym kliknięciem */
-export const ACCESS_CATALOG: Array<{ key: string; title: string; kind: AccessKind; description: string }> = [
+export const ACCESS_CATALOG: Array<{ key: string; title: string; kind: AccessKind; description: string; url?: string }> = [
   {
     key: 'cms',
     title: 'Panel do edycji obecnej strony (CMS)',
@@ -234,24 +236,28 @@ export const ACCESS_CATALOG: Array<{ key: string; title: string; kind: AccessKin
     key: 'google_business',
     title: 'Profil Firmy w Google (wizytówka)',
     kind: 'invite',
+    url: 'https://business.google.com',
     description: `Wejdź na business.google.com i wybierz wizytówkę. Kliknij „Menu” → „Ustawienia profilu firmy” → „Osoby i dostęp” → „Dodaj”. Wpisz ${ADMIN_EMAIL} i wybierz rolę „Menedżer”.`,
   },
   {
     key: 'search_console',
     title: 'Google Search Console',
     kind: 'invite',
+    url: 'https://search.google.com/search-console',
     description: `Wejdź na search.google.com/search-console i wybierz stronę. „Ustawienia” → „Użytkownicy i uprawnienia” → „Dodaj użytkownika”. Wpisz ${ADMIN_EMAIL} z uprawnieniami „Pełne”.`,
   },
   {
     key: 'analytics',
     title: 'Google Analytics',
     kind: 'invite',
+    url: 'https://analytics.google.com',
     description: `Wejdź na analytics.google.com → „Administracja” → „Zarządzanie dostępem do konta” → „+”. Dodaj ${ADMIN_EMAIL} z rolą „Administrator”.`,
   },
   {
     key: 'meta',
     title: 'Facebook i Instagram (Meta Business Suite)',
     kind: 'invite',
+    url: 'https://business.facebook.com',
     description: `Wejdź na business.facebook.com → „Ustawienia” → „Osoby” → „Dodaj osoby”. Wpisz ${ADMIN_EMAIL} i nadaj dostęp do strony na Facebooku i konta na Instagramie.`,
   },
   {
@@ -280,7 +286,7 @@ export async function listAccess(clientId: string): Promise<AccessItem[]> {
 export async function addAccess(item: Partial<AccessItem> & { client_id: string; title: string }) {
   must(await sb().from('access_items').insert(item))
 }
-export async function updateAccess(id: string, patch: Partial<Pick<AccessItem, 'title' | 'description' | 'kind' | 'status' | 'note' | 'step_id' | 'urgent' | 'position'>>) {
+export async function updateAccess(id: string, patch: Partial<Pick<AccessItem, 'title' | 'description' | 'kind' | 'status' | 'note' | 'step_id' | 'urgent' | 'position' | 'login_url'>>) {
   must(await sb().from('access_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))
 }
 export async function deleteAccess(id: string) {
@@ -289,7 +295,7 @@ export async function deleteAccess(id: string) {
 export async function addAccessFromCatalog(clientId: string, keys: string[], existing: AccessItem[], caseId?: string) {
   const have = new Set(existing.map((e) => e.service))
   const rows = ACCESS_CATALOG.filter((c) => keys.includes(c.key) && !have.has(c.key)).map((c, i) => ({
-    client_id: clientId, service: c.key, title: c.title, kind: c.kind, description: c.description, position: existing.length + i,
+    client_id: clientId, service: c.key, title: c.title, kind: c.kind, description: c.description, login_url: c.url ?? null, position: existing.length + i,
     ...(caseId ? { case_id: caseId } : {}),
   }))
   if (rows.length) must(await sb().from('access_items').insert(rows))

@@ -4340,3 +4340,28 @@ body.is-sorting * {
 .brief-row .doc-actions {
   margin-top: 10px;
 }
+
+/* dostępy: link do panelu logowania narzędzia */
+.acc-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  margin: -4px 0 0;
+  padding: 0 20px 14px 62px;
+  font: 600 13.5px/1.3 var(--font);
+  color: var(--teal-700, #0a7189);
+  text-decoration: none;
+}
+.acc-link:hover {
+  text-decoration: underline;
+}
+.acc-link .muted {
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 960px) {
+  .acc-link {
+    padding-left: 18px;
+  }
+}

@@ -155,6 +155,13 @@ function AccessCard({
         <Icon name={open ? 'up' : 'down'} size={16} />
       </button>
 
+      {item.login_url && (
+        <a className="acc-link" href={/^https?:/.test(item.login_url) ? item.login_url : `https://${item.login_url}`} target="_blank" rel="noopener noreferrer">
+          <Icon name="link" size={14} /> Przejdź do panelu logowania
+          <span className="muted">{item.login_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+        </a>
+      )}
+
       {open && (
         <div className="acc-body">
           {item.description && <p className="acc-desc">{item.description}</p>}
@@ -336,6 +343,7 @@ function ItemEditor({
 }) {
   const [title, setTitle] = useState(item.title ?? '')
   const [description, setDescription] = useState(item.description ?? '')
+  const [loginUrl, setLoginUrl] = useState(item.login_url ?? '')
   const [kind, setKind] = useState<AccessKind>(item.kind ?? 'login')
   const [urgent, setUrgent] = useState(!!item.urgent)
   const [stepId, setStepId] = useState(item.step_id ?? '')
@@ -363,6 +371,7 @@ function ItemEditor({
           textarea
           placeholder={kind === 'invite' ? `Jak zaprosić ${ADMIN_EMAIL}…` : 'Do czego służy, co jest potrzebne'}
         />
+        <Field label="Adres panelu logowania (link przy pozycji)" value={loginUrl} onChange={setLoginUrl} placeholder="np. https://ads.google.com" />
         {isAdmin && (
           <>
             <Toggle checked={urgent} onChange={setUrgent} label="Pilne (klient zobaczy to na górze listy „Do zrobienia”)" />
@@ -391,6 +400,7 @@ function ItemEditor({
             onSave({
               title: title.trim(),
               description: description.trim() || null,
+              login_url: loginUrl.trim() || null,
               kind,
               ...(isAdmin ? { urgent, step_id: stepId || null } : {}),
             })
