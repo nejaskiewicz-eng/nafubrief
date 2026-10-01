@@ -4,6 +4,7 @@ import { Check, Icon, Modal, Spinner, StatusBadge, useToast } from '../../compon
 import { api, type ClientInput, type ClientWithBriefs } from '../../lib/api'
 import type { TemplateKey } from '../../lib/types'
 import { TEMPLATES } from '../../templates'
+import { ToneFields } from '../../components/ToneFields'
 
 export default function Dashboard() {
   const [clients, setClients] = useState<ClientWithBriefs[] | null>(null)
@@ -150,6 +151,7 @@ function NewClientModal({ onClose }: { onClose: () => void }) {
             <span className="label">Obecna strona</span>
             <input className="input" placeholder="adres www" value={form.website ?? ''} onChange={set('website')} />
           </label>
+          <ToneFields value={form} onChange={(t) => setForm({ ...form, ...t })} />
         </div>
 
         <p className="label" style={{ margin: '22px 0 10px' }}>
@@ -161,7 +163,7 @@ function NewClientModal({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn" onClick={onClose}>
             Anuluj
           </button>
-          <button className="btn btn-primary" disabled={busy || !form.name.trim()}>
+          <button className="btn btn-primary" disabled={busy || !form.name.trim() || !form.address_form}>
             {busy ? 'Tworzę…' : 'Utwórz i sprawdź pytania'}
           </button>
         </div>

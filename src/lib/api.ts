@@ -76,6 +76,9 @@ function load(): DemoDB {
     website: 'przyklad.pl',
     industry: 'Salon optyczny',
     notes: 'Klient demonstracyjny, możesz go usunąć.',
+    address_form: 'pani',
+    salutation: 'Pani Anno',
+    tone_notes: null,
     portal_token: uuid(),
     slug: 'salon-optyczny-przyklad',
     user_id: 'demo-client',
@@ -188,6 +191,7 @@ export const api = {
       return demo((db) => {
         const c: Client = {
           company: null, email: null, phone: null, website: null, industry: null, notes: null,
+          address_form: null, salutation: null, tone_notes: null,
           ...input, id: uuid(), portal_token: uuid(), slug: clientSlug(db, input), user_id: null, login_email: null, created_at: now(),
         }
         db.clients.push(c)
@@ -348,6 +352,7 @@ export const api = {
     const c = data as Pick<Client, 'id' | 'name' | 'company' | 'slug' | 'login_email'>
     return {
       ...c, email: null, phone: null, website: null, industry: null, notes: null,
+      address_form: null, salutation: null, tone_notes: null,
       portal_token: '', user_id: s.session.user.id, created_at: '',
     }
   },

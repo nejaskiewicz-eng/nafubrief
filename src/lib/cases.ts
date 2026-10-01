@@ -16,12 +16,16 @@ function must<T>(res: { data: T | null; error: { message: string } | null }): T 
 }
 
 export type CaseStatus = 'open' | 'review' | 'accepted' | 'closed'
+export type CasePriority = 'normal' | 'urgent' | 'very_urgent'
+export const PRIORITY_LABEL: Record<CasePriority, string> = { normal: 'Zwykła', urgent: 'Pilne', very_urgent: 'Bardzo pilne' }
 export interface Case {
   id: string
   client_id: string
   title: string
   description: string | null
   status: CaseStatus
+  /** kategoria pilności */
+  priority: CasePriority
   created_by: 'admin' | 'client'
   author_id: string
   due_date: string | null
@@ -57,10 +61,10 @@ export const CASE_BADGE: Record<CaseStatus, string> = { open: 'in_progress', rev
 export async function listCases(clientId: string): Promise<Case[]> {
   return must(await sb().from('cases').select('*').eq('client_id', clientId).order('updated_at', { ascending: false }))
 }
-export async function createCase(c: { client_id: string; title: string; description?: string | null; due_date?: string | null; created_by: 'admin' | 'client' }): Promise<Case> {
+export async function createCase(c: { client_id: string; title: string; description?: string | null; due_date?: string | null; priority?: CasePriority; created_by: 'admin' | 'client' }): Promise<Case> {
   return must(await sb().from('cases').insert(c).select().single())
 }
-export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'summary' | 'status' | 'closed_at' | 'accepted_at'>>) {
+export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'priority' | 'summary' | 'status' | 'closed_at' | 'accepted_at'>>) {
   must(await sb().from('cases').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))
 }
 export async function deleteCase(id: string) {

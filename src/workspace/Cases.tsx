@@ -3,9 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import {
-  CASE_BADGE, CASE_STATUS, acceptCase, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
+  CASE_BADGE, CASE_STATUS, PRIORITY_LABEL, acceptCase, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
-  type Case, type CaseItems, type CaseMessage,
+  type Case, type CaseItems, type CaseMessage, type CasePriority,
 } from '../lib/cases'
 import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateTask, type Task } from '../lib/project'
 import type { Brief, Client } from '../lib/types'
@@ -46,7 +46,8 @@ export default function Cases({ client, isAdmin }: { client: Client; isAdmin: bo
   const current = openId ? cases.find((c) => c.id === openId) : null
   if (current) return <CaseView key={current.id} client={client} c={current} isAdmin={isAdmin} onBack={() => open(null)} onChanged={load} />
 
-  const active = cases.filter((c) => c.status !== 'closed')
+  const rank: Record<CasePriority, number> = { very_urgent: 0, urgent: 1, normal: 2 }
+  const active = cases.filter((c) => c.status !== 'closed').sort((a, b) => rank[a.priority] - rank[b.priority])
   const closed = cases.filter((c) => c.status === 'closed')
 
   return (
@@ -75,8 +76,8 @@ export default function Cases({ client, isAdmin }: { client: Client; isAdmin: bo
         <NewCase
           isAdmin={isAdmin}
           onClose={() => setCreating(false)}
-          onSave={async (title, description, due) => {
-            const c = await createCase({ client_id: client.id, title, description: description || null, due_date: due || null, created_by: isAdmin ? 'admin' : 'client' })
+          onSave={async (title, description, due, priority) => {
+            const c = await createCase({ client_id: client.id, title, description: description || null, due_date: due || null, priority, created_by: isAdmin ? 'admin' : 'client' })
             setCreating(false)
             await load()
             open(c.id)
@@ -100,6 +101,7 @@ function CaseList({ title, list, unread, isAdmin, onOpen }: { title: string; lis
             <h3>{c.title}</h3>
             <div className="meta">
               <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
+              {c.priority !== 'normal' && c.status !== 'closed' && <span className="badge urgent">{PRIORITY_LABEL[c.priority]}</span>}
               {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
               {c.due_date && c.status !== 'closed' && <span>termin {fmtDay(c.due_date)}</span>}
               <span>zmiana {fmtDate(c.updated_at)}</span>
@@ -115,11 +117,12 @@ function CaseList({ title, list, unread, isAdmin, onOpen }: { title: string; lis
   )
 }
 
-function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () => void; onSave: (title: string, description: string, due: string) => Promise<void> }) {
+function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () => void; onSave: (title: string, description: string, due: string, priority: CasePriority) => Promise<void> }) {
   const toast = useToast()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [due, setDue] = useState('')
+  const [priority, setPriority] = useState<CasePriority>('normal')
   const [busy, setBusy] = useState(false)
   return (
     <Modal label="Nowa sprawa" onClose={onClose}>
@@ -128,6 +131,7 @@ function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () =
       <div className="stack">
         <Field label="Temat" value={title} onChange={setTitle} placeholder={isAdmin ? 'np. Dokumenty prawne dla obecnej strony' : 'np. Zmiana godzin otwarcia na stronie'} />
         <Field label="Opis" value={description} onChange={setDescription} textarea placeholder={isAdmin ? 'Co trzeba zrobić i czego potrzebuję od klienta' : 'Opisz, czego dotyczy sprawa'} />
+        <PriorityPick value={priority} onChange={setPriority} />
         {isAdmin && <Field label="Termin (opcjonalnie)" type="date" value={due} onChange={setDue} />}
       </div>
       <div className="modal-actions">
@@ -141,7 +145,7 @@ function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () =
             if (!title.trim()) return toast('Podaj temat sprawy.')
             setBusy(true)
             try {
-              await onSave(title.trim(), description.trim(), due)
+              await onSave(title.trim(), description.trim(), due, priority)
             } catch (e) {
               toast((e as Error).message)
               setBusy(false)
@@ -227,6 +231,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
       <section className="card case-head">
         <div className="meta">
           <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
+          {c.priority !== 'normal' && <span className="badge urgent">{PRIORITY_LABEL[c.priority]}</span>}
           {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
           {c.due_date && <span>termin {fmtDay(c.due_date)}</span>}
           <span>założona {fmtDate(c.created_at)}</span>
@@ -800,7 +805,7 @@ function InviteCase({ c, client, onClose, onSend }: { c: Case; client: Client; o
         <p style={{ margin: 0 }}>
           Do: <strong>{to || 'brak adresu e-mail klienta'}</strong>
           <br />
-          Temat: <strong>Sprawa do Twojego udziału: {c.title}</strong>
+          Temat: <strong>{client.address_form === 'ty' ? `${client.salutation ? `${client.salutation}, n` : 'N'}owa sprawa w panelu: ${c.title}` : `Sprawa wymagająca ${client.address_form === 'pani' ? 'Pani' : client.address_form === 'pan' ? 'Pana' : 'Państwa'} udziału: ${c.title}`}</strong>
         </p>
         <p className="muted" style={{ margin: 0, fontSize: 14 }}>
           W e-mailu będzie temat, opis{c.due_date ? ', termin' : ''} i przycisk „Otwórz sprawę” prowadzący prosto do niej w strefie klienta.
@@ -836,6 +841,7 @@ function EditCase({ c, isAdmin, onClose, onSave }: { c: Case; isAdmin: boolean; 
   const [title, setTitle] = useState(c.title)
   const [description, setDescription] = useState(c.description ?? '')
   const [due, setDue] = useState(c.due_date ?? '')
+  const [priority, setPriority] = useState<CasePriority>(c.priority)
   return (
     <Modal label="Edytuj sprawę" onClose={onClose}>
       <div className="eyebrow">Sprawy bieżące</div>
@@ -843,6 +849,7 @@ function EditCase({ c, isAdmin, onClose, onSave }: { c: Case; isAdmin: boolean; 
       <div className="stack">
         <Field label="Temat" value={title} onChange={setTitle} />
         <Field label="Opis" value={description} onChange={setDescription} textarea />
+        <PriorityPick value={priority} onChange={setPriority} />
         {isAdmin && <Field label="Termin" type="date" value={due} onChange={setDue} />}
       </div>
       <div className="modal-actions">
@@ -852,11 +859,26 @@ function EditCase({ c, isAdmin, onClose, onSave }: { c: Case; isAdmin: boolean; 
         <button
           className="btn btn-primary"
           disabled={!title.trim()}
-          onClick={() => onSave({ title: title.trim(), description: description.trim() || null, ...(isAdmin ? { due_date: due || null } : {}) })}
+          onClick={() => onSave({ title: title.trim(), description: description.trim() || null, priority, ...(isAdmin ? { due_date: due || null } : {}) })}
         >
           Zapisz
         </button>
       </div>
     </Modal>
+  )
+}
+
+function PriorityPick({ value, onChange }: { value: CasePriority; onChange: (v: CasePriority) => void }) {
+  return (
+    <div className="field">
+      <span className="label">Kategoria</span>
+      <div className="seg" role="radiogroup" aria-label="Kategoria pilności">
+        {(Object.keys(PRIORITY_LABEL) as CasePriority[]).map((k) => (
+          <button type="button" key={k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
+            {PRIORITY_LABEL[k]}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }

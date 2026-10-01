@@ -74,6 +74,9 @@ export type Answers = Record<string, AnswerValue>
 
 export type BriefStatus = 'draft' | 'sent' | 'in_progress' | 'submitted'
 
+/** Forma zwracania się do klienta */
+export type AddressForm = 'ty' | 'pani' | 'pan' | 'panstwo'
+
 export interface Client {
   id: string
   name: string
@@ -89,6 +92,12 @@ export interface Client {
   /** konto klienta (logowanie do ankiet) */
   user_id: string | null
   login_email: string | null
+  /** jak się zwracać: na Ty albo oficjalnie */
+  address_form: AddressForm | null
+  /** zwrot w powitaniu, np. „Olu”, „Pani Aleksandro” */
+  salutation: string | null
+  /** ton i sposób prowadzenia rozmów */
+  tone_notes: string | null
   created_at: string
 }
 

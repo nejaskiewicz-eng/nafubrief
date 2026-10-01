@@ -14,6 +14,7 @@ import { isDemo } from '../../lib/supabase'
 import { unreadCount } from '../../lib/workspace'
 import Access from '../../workspace/Access'
 import Cases from '../../workspace/Cases'
+import { ToneFields, toneSummary } from '../../components/ToneFields'
 import { caseUnread } from '../../lib/cases'
 import Documents from '../../workspace/Documents'
 import Media from '../../workspace/Media'
@@ -87,6 +88,10 @@ export default function ClientDetail() {
             {client.email && <a href={`mailto:${client.email}`}>{client.email}</a>}
             {client.phone && <a href={`tel:${client.phone}`}>{client.phone}</a>}
             {client.industry && <span>{client.industry}</span>}
+          </div>
+          <div className="tone-line" title={client.tone_notes ?? ''}>
+            <strong>Komunikacja:</strong> {toneSummary(client)}
+            {client.tone_notes && <span className="muted"> · {client.tone_notes}</span>}
           </div>
         </div>
         <div className="row">
@@ -752,6 +757,7 @@ function DataTab({ client, onSaved }: { client: Client; onSaved: () => Promise<v
   const [form, setForm] = useState<ClientInput>({
     name: client.name, company: client.company, email: client.email, phone: client.phone,
     website: client.website, industry: client.industry, notes: client.notes,
+    address_form: client.address_form, salutation: client.salutation, tone_notes: client.tone_notes,
   })
   const set = (k: keyof ClientInput) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value })
   const fields: Array<[keyof ClientInput, string]> = [
@@ -774,6 +780,7 @@ function DataTab({ client, onSaved }: { client: Client; onSaved: () => Promise<v
               <input className="input" value={(form[k] as string) ?? ''} onChange={set(k)} required={k === 'name'} />
             </label>
           ))}
+          <ToneFields value={form} onChange={(t) => setForm({ ...form, ...t })} />
           <label className="field full">
             <span className="label">Notatki (widoczne tylko dla Ciebie, trafiają też do agenta AI)</span>
             <textarea className="textarea" value={form.notes ?? ''} onChange={set('notes')} />

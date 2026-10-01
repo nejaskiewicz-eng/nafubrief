@@ -3814,3 +3814,19 @@ button.case-row:hover {
   border: 1px solid var(--teal-100);
   font-size: 14.5px;
 }
+.tone-fields {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.tone-line {
+  margin-top: 8px;
+  font-size: 13.5px;
+  max-width: 760px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

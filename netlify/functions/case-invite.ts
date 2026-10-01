@@ -11,8 +11,8 @@ const json = (statusCode: number, body: unknown) => ({
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const fmtDay = (d: string) => new Date(d).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })
 
-type CaseRow = { id: string; title: string; description: string | null; due_date: string | null; status: string; client_id: string }
-type ClientRow = { slug: string; name: string; company: string | null; email: string | null; login_email: string | null }
+type CaseRow = { id: string; title: string; description: string | null; due_date: string | null; status: string; priority: string; client_id: string }
+type ClientRow = { slug: string; name: string; company: string | null; email: string | null; login_email: string | null; address_form: string | null; salutation: string | null }
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Metoda niedozwolona' })
@@ -41,37 +41,24 @@ export const handler: Handler = async (event) => {
   if (!/^[0-9a-f-]{36}$/i.test(caseId)) return json(400, { error: 'Nieprawidłowa sprawa.' })
 
   // RLS: administratorka widzi tylko sprawy swoich klientów
-  const { data: c } = await db.from('cases').select('id, title, description, due_date, status, client_id').eq('id', caseId).single<CaseRow>()
+  const { data: c } = await db.from('cases').select('id, title, description, due_date, status, priority, client_id').eq('id', caseId).single<CaseRow>()
   if (!c) return json(404, { error: 'Nie znaleziono sprawy.' })
   if (c.status === 'closed') return json(409, { error: 'Sprawa jest zamknięta.' })
-  const { data: cl } = await db.from('clients').select('slug, name, company, email, login_email').eq('id', c.client_id).single<ClientRow>()
+  const { data: cl } = await db.from('clients').select('slug, name, company, email, login_email, address_form, salutation').eq('id', c.client_id).single<ClientRow>()
   if (!cl) return json(404, { error: 'Nie znaleziono klienta.' })
   const to = cl.login_email || cl.email
   if (!to) return json(400, { error: 'Klient nie ma adresu e-mail. Uzupełnij go w danych klienta.' })
 
   const site = (process.env.VITE_SITE_URL || process.env.URL || '').replace(/\/$/, '')
   const link = `${site}/${cl.slug}/sprawy?sprawa=${c.id}`
-  const para = (s: string) => esc(s).replace(/\n/g, '<br>')
-
-  const html = `
-<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#0d2830;max-width:560px">
-  <p>Dzień dobry,</p>
-  <p>w Twojej strefie klienta NAFU Design czeka sprawa, w której potrzebuję Twojego udziału:</p>
-  <p style="font-size:18px;font-weight:bold;margin:18px 0 6px">${esc(c.title)}</p>
-  ${c.description ? `<p style="margin:0 0 12px;color:#3b5560">${para(c.description)}</p>` : ''}
-  ${c.due_date ? `<p style="margin:0 0 12px"><strong>Termin:</strong> ${fmtDay(c.due_date)}</p>` : ''}
-  ${note ? `<p style="margin:0 0 12px;padding:12px 14px;background:#e6f7fa;border-radius:10px">${para(note)}</p>` : ''}
-  <p style="margin:22px 0">
-    <a href="${link}" style="background:#0a7189;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold;display:inline-block">Otwórz sprawę</a>
-  </p>
-  <p style="font-size:13px;color:#587079">W sprawie znajdziesz zadania, pytania, dokumenty i rozmowę. Zaloguj się adresem ${esc(to)}. Jeśli przycisk nie działa, skopiuj link: ${esc(link)}</p>
-  <p>Pozdrawiam,<br>Natalia Jaśkiewicz<br>NAFU Design</p>
-</div>`
+  const { subject, html } = renderCaseInvite({
+    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: c.description, due: c.due_date, note, login: to, link,
+  })
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, reply_to: process.env.NOTIFY_EMAIL || undefined, subject: `Sprawa do Twojego udziału: ${c.title}`, html }),
+    body: JSON.stringify({ from, to, reply_to: process.env.NOTIFY_EMAIL || undefined, subject, html }),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
@@ -79,4 +66,49 @@ export const handler: Handler = async (event) => {
   }
   await db.from('cases').update({ invited_at: new Date().toISOString() }).eq('id', c.id)
   return json(200, { ok: true, to })
+}
+
+/** Treść e-maila zależna od formy zwracania się do klienta (na Ty albo oficjalnie) */
+export function renderCaseInvite(p: {
+  form: string | null
+  salutation: string | null
+  priority?: string | null
+  title: string
+  description: string | null
+  due: string | null
+  note: string
+  login: string
+  link: string
+}) {
+  const ty = p.form === 'ty'
+  const pron = p.form === 'pani' ? 'Pani' : p.form === 'pan' ? 'Pana' : 'Państwa'
+  const sal = (p.salutation || '').trim()
+  const para = (s: string) => esc(s).replace(/\n/g, '<br>')
+
+  const subject = ty ? `${sal ? `${sal}, n` : 'N'}owa sprawa w panelu: ${p.title}` : `Sprawa wymagająca ${pron} udziału: ${p.title}`
+  const greet = ty ? (sal ? `Cześć ${esc(sal)}!` : 'Cześć!') : `Dzień dobry${sal ? ` ${esc(sal)}` : ''},`
+  const cat = p.priority === 'very_urgent' ? 'Bardzo pilne' : p.priority === 'urgent' ? 'Pilne' : ''
+  const intro = ty
+    ? `W Twojej strefie klienta NAFU dodałam nową sprawę${cat ? `, z kategorii: <strong>${cat}</strong>` : ''}.`
+    : `w strefie klienta NAFU Design dodałam nową sprawę${cat ? ` z kategorii: <strong>${cat}</strong>` : ''}, w której potrzebuję ${pron} udziału.`
+  const outro = ty
+    ? `W środku masz wszystko w jednym miejscu: zadania, pytania, dokumenty i naszą rozmowę. Logujesz się adresem ${esc(p.login)}. Jeśli przycisk nie zadziała, skopiuj link: ${esc(p.link)}`
+    : `W sprawie znajdują się zadania, pytania, dokumenty i nasza korespondencja. Proszę zalogować się adresem ${esc(p.login)}. Jeśli przycisk nie działa, proszę skopiować link: ${esc(p.link)}`
+  const sign = ty ? 'Pozdrawiam,<br>Nat' : 'Z pozdrowieniami,<br>Natalia Jaśkiewicz<br>NAFU Design'
+
+  const html = `
+<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#0d2830;max-width:560px">
+  <p>${greet}</p>
+  <p>${intro}</p>
+  <p style="font-size:18px;font-weight:bold;margin:18px 0 6px">${esc(p.title)}</p>
+  ${p.description ? `<p style="margin:0 0 12px;color:#3b5560">${para(p.description)}</p>` : ''}
+  ${p.due ? `<p style="margin:0 0 12px"><strong>Termin:</strong> ${fmtDay(p.due)}</p>` : ''}
+  ${p.note ? `<p style="margin:0 0 12px;padding:12px 14px;background:#e6f7fa;border-radius:10px">${para(p.note)}</p>` : ''}
+  <p style="margin:22px 0">
+    <a href="${p.link}" style="background:#0a7189;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold;display:inline-block">Otwórz sprawę</a>
+  </p>
+  <p style="font-size:13px;color:#587079">${outro}</p>
+  <p>${sign}</p>
+</div>`
+  return { subject, html }
 }
