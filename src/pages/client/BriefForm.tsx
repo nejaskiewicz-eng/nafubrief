@@ -30,6 +30,7 @@ export default function BriefFormPage() {
           const data: PublicBrief = {
             status: b.status, title: b.title, description: b.description, intro: b.intro, schema: b.schema,
             answers: b.answers, client_name: mine.company || mine.name, submitted_at: b.submitted_at,
+            own_title: !!b.case_id || b.template_key === 'custom',
           }
           if (alive) setState({ kind: 'fill', data, brief: b, email: session.email })
           return
@@ -416,10 +417,14 @@ function Welcome({
                 Pilne: ta ankieta jest mi potrzebna jak najszybciej. Dziękuję, że wypełnisz ją w pierwszej kolejności.
               </span>
             )}
-            <div className="wl-kicker">{data.title}</div>
-            <h1>
-              Pierwszy krok do Twojej <em>nowej strony</em>
-            </h1>
+            <div className="wl-kicker">{data.own_title ? 'Ankieta' : data.title}</div>
+            {data.own_title ? (
+              <h1>{data.title}</h1>
+            ) : (
+              <h1>
+                Pierwszy krok do Twojej <em>nowej strony</em>
+              </h1>
+            )}
             {intro && <p className="wl-lead">{intro}</p>}
             {rest.map((r, i) => (
               <p className="wl-note" key={i}>
@@ -476,7 +481,7 @@ function Welcome({
           <div className="wl-step">
             <span className="n">3</span>
             <strong>Wysyłasz odpowiedzi</strong>
-            <span>Czego nie wiesz, zostaw puste. Omówimy to razem na spotkaniu.</span>
+            <span>{data.own_title ? 'Czego nie wiesz, zaznacz „Nie wiem” albo zostaw puste. Wrócimy do tego w rozmowie.' : 'Czego nie wiesz, zostaw puste. Omówimy to razem na spotkaniu.'}</span>
           </div>
         </section>
 

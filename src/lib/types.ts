@@ -141,6 +141,8 @@ export interface Summary {
 
 /** Co widzi klient pod linkiem */
 export interface PublicBrief {
+  /** ankieta w sprawie bieżącej albo własna: na ekranie powitalnym nagłówkiem jest jej tytuł, a nie hasło o nowej stronie */
+  own_title?: boolean
   status: BriefStatus
   title: string
   description: string | null

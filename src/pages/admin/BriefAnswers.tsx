@@ -101,7 +101,7 @@ export function BriefPreview() {
     }
     api.getBrief(id).then(async (b) => {
       const c = await api.getClient(b.client_id)
-      setData({ status: 'sent', title: b.title, description: b.description, intro: b.intro, schema: b.schema, answers: {}, client_name: c.company || c.name, submitted_at: null })
+      setData({ status: 'sent', title: b.title, description: b.description, intro: b.intro, schema: b.schema, answers: {}, client_name: c.company || c.name, submitted_at: null, own_title: !!b.case_id || b.template_key === 'custom' })
     })
   }, [id, key])
 
