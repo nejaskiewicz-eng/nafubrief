@@ -3977,3 +3977,41 @@ body.is-sorting * {
   letter-spacing: -2px;
   user-select: none;
 }
+
+/* notatki do dokumentów: wewnętrzna i dla klienta */
+.doc-note-client {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #e6f7fa;
+  border: 1px solid #bfe7ef;
+  font-size: 14px;
+  color: var(--ink, #0d2830);
+}
+.note-kind {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  width: fit-content;
+}
+.note-kind-opt {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.note-kind-opt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.note-kind-opt.on {
+  background: var(--teal, #0a7189);
+  color: #fff;
+  font-weight: 600;
+}

@@ -104,8 +104,15 @@ export default function Documents({
                   )}
                   <span>dodano {fmtDate(d.created_at)}</span>
                 </div>
-                {d.note && <p className="muted" style={{ margin: '6px 0 0', fontSize: 14 }}>{d.note}</p>}
-                {isAdmin && <AdminNote doc={d} onChanged={load} />}
+                {isAdmin ? (
+                  <DocNotes doc={d} onChanged={load} />
+                ) : (
+                  d.note && (
+                    <div className="doc-note doc-note-client">
+                      <strong>Notatka:</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{d.note}</span>
+                    </div>
+                  )
+                )}
                 {isAdmin && d.content?.includes('[DO UZUPEŁNIENIA') && <span className="badge in_progress" style={{ marginTop: 6 }}>Są miejsca do uzupełnienia</span>}
               </div>
               <div className="actions">
@@ -271,20 +278,40 @@ function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDo
   )
 }
 
-/** Notatka wewnętrzna do dokumentu: dodanie, edycja, usunięcie (klient jej nie widzi) */
-function AdminNote({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Promise<void> }) {
+type NoteKind = 'internal' | 'client'
+const NOTE_LABEL: Record<NoteKind, string> = {
+  internal: 'Notatka wewnętrzna (klient jej nie widzi)',
+  client: 'Notatka dla klienta (klient ją widzi)',
+}
+
+/** Notatki do dokumentu: wewnętrzna (document_notes) i dla klienta (client_documents.note). Dodanie, edycja, zmiana rodzaju, usunięcie. */
+function DocNotes({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Promise<void> }) {
   const toast = useToast()
-  const [editing, setEditing] = useState(false)
-  const [text, setText] = useState(doc.admin_note ?? '')
+  const [editing, setEditing] = useState<{ from: NoteKind | null; kind: NoteKind; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
-  useEffect(() => setText(doc.admin_note ?? ''), [doc.admin_note])
+  const value = (k: NoteKind) => (k === 'internal' ? doc.admin_note : doc.note) ?? ''
+  const write = async (k: NoteKind, body: string) => {
+    if (k === 'internal') {
+      if (body) await saveDocumentNote(doc, body)
+      else await deleteDocumentNote(doc.id)
+    } else await updateDocument(doc.id, { note: body || null })
+  }
 
   const save = async () => {
+    if (!editing) return
     setBusy(true)
     try {
-      if (text.trim()) await saveDocumentNote(doc, text.trim())
-      else await deleteDocumentNote(doc.id)
-      setEditing(false)
+      const text = editing.text.trim()
+      const { from, kind } = editing
+      if (from && from !== kind) {
+        // zmiana rodzaju: przenosimy treść, a jeśli tam już coś jest, dopisujemy
+        const existing = value(kind).trim()
+        await write(kind, [existing, text].filter(Boolean).join('\n\n'))
+        await write(from, '')
+      } else {
+        await write(kind, text)
+      }
+      setEditing(null)
       await onChanged()
     } catch (e) {
       toast((e as Error).message)
@@ -292,51 +319,65 @@ function AdminNote({ doc, onChanged }: { doc: ClientDocument; onChanged: () => P
       setBusy(false)
     }
   }
+  const remove = async (k: NoteKind) => {
+    if (!confirm(k === 'internal' ? 'Usunąć notatkę wewnętrzną?' : 'Usunąć notatkę dla klienta? Zniknie też u klienta.')) return
+    try {
+      await write(k, '')
+      await onChanged()
+    } catch (e) {
+      toast((e as Error).message)
+    }
+  }
 
-  if (editing)
-    return (
-      <div className="admin-note admin-note-edit">
-        <strong>Notatka wewnętrzna (klient jej nie widzi)</strong>
-        <textarea className="textarea" style={{ minHeight: 110 }} value={text} onChange={(e) => setText(e.target.value)} autoFocus />
-        <div className="row">
-          <button className="btn btn-sm" onClick={() => { setText(doc.admin_note ?? ''); setEditing(false) }}>
-            Anuluj
-          </button>
-          <button className="btn btn-sm btn-primary" disabled={busy} onClick={save}>
-            Zapisz
-          </button>
-        </div>
-      </div>
-    )
-  if (!doc.admin_note)
-    return (
-      <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setEditing(true)}>
-        <Icon name="plus" size={14} /> Notatka wewnętrzna
-      </button>
-    )
+  const shown = (['internal', 'client'] as NoteKind[]).filter((k) => value(k) && editing?.from !== k)
+  const free = (['internal', 'client'] as NoteKind[]).filter((k) => !value(k))
+
   return (
-    <div className="admin-note">
-      <strong>Notatka wewnętrzna (klient jej nie widzi):</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{doc.admin_note}</span>
-      <span className="admin-note-tools">
-        <button className="link-btn" onClick={() => setEditing(true)}>
-          edytuj
+    <>
+      {shown.map((k) => (
+        <div key={k} className={`doc-note ${k === 'internal' ? 'admin-note' : 'doc-note-client'}`}>
+          <strong>{NOTE_LABEL[k]}:</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{value(k)}</span>
+          <span className="admin-note-tools">
+            <button className="link-btn" onClick={() => setEditing({ from: k, kind: k, text: value(k) })}>
+              edytuj
+            </button>
+            {' · '}
+            <button className="link-btn" onClick={() => remove(k)}>
+              usuń
+            </button>
+          </span>
+        </div>
+      ))}
+      {editing && (
+        <div className="admin-note admin-note-edit">
+          <div className="note-kind" role="radiogroup" aria-label="Rodzaj notatki">
+            {(['internal', 'client'] as NoteKind[]).map((k) => (
+              <label key={k} className={`note-kind-opt${editing.kind === k ? ' on' : ''}`}>
+                <input type="radio" name={`note-kind-${doc.id}`} checked={editing.kind === k} onChange={() => setEditing({ ...editing, kind: k })} />
+                {k === 'internal' ? 'Wewnętrzna' : 'Dla klienta'}
+              </label>
+            ))}
+          </div>
+          <span className="muted" style={{ fontSize: 12.5 }}>
+            {editing.kind === 'internal' ? 'Widzisz ją tylko Ty.' : doc.visible ? 'Klient zobaczy ją pod tytułem dokumentu.' : 'Klient zobaczy ją po udostępnieniu dokumentu.'}
+            {editing.from && editing.from !== editing.kind && value(editing.kind) ? ' Treść zostanie dopisana do istniejącej notatki tego rodzaju.' : ''}
+          </span>
+          <textarea className="textarea" style={{ minHeight: 110 }} value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })} autoFocus />
+          <div className="row">
+            <button className="btn btn-sm" onClick={() => setEditing(null)}>
+              Anuluj
+            </button>
+            <button className="btn btn-sm btn-primary" disabled={busy} onClick={save}>
+              Zapisz
+            </button>
+          </div>
+        </div>
+      )}
+      {!editing && free.length > 0 && (
+        <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setEditing({ from: null, kind: free[0], text: '' })}>
+          <Icon name="plus" size={14} /> Notatka
         </button>
-        {' · '}
-        <button
-          className="link-btn"
-          onClick={async () => {
-            if (!confirm('Usunąć notatkę wewnętrzną?')) return
-            try {
-              await deleteDocumentNote(doc.id)
-              await onChanged()
-            } catch (e) {
-              toast((e as Error).message)
-            }
-          }}
-        >
-          usuń
-        </button>
-      </span>
-    </div>
+      )}
+    </>
   )
 }
