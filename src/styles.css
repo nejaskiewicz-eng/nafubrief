@@ -4365,3 +4365,72 @@ body.is-sorting * {
     padding-left: 18px;
   }
 }
+
+/* ---------- sprawa: aktywność klienta na żywo (widok administratorki) ---------- */
+
+.case-live {
+  padding: 20px 24px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid #e4dcf5;
+  background: linear-gradient(180deg, #f8f5fe, var(--surface, #fff));
+}
+.live-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #b9c6cb;
+  vertical-align: 1px;
+}
+.live-dot.on {
+  background: #1fae5b;
+  box-shadow: 0 0 0 4px rgba(31, 174, 91, 0.18);
+}
+.live-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.live-stat {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line);
+}
+.live-stat strong {
+  font: 700 18px/1.2 var(--font);
+}
+.live-stat span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.live-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.live-log li {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+}
+.live-log time {
+  color: var(--muted);
+  font-size: 13px;
+}
+.live-log span {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .live-log li {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

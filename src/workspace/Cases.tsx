@@ -4,9 +4,9 @@ import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../compone
 import { api } from '../lib/api'
 import { renderMarkdown } from '../lib/markdown'
 import {
-  CASE_BADGE, CASE_STATUS, CASE_TYPES, PRIORITY_LABEL, SECTIONS, caseType, caseTypeLabel, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
+  CASE_BADGE, CASE_STATUS, CASE_TYPES, PRIORITY_LABEL, SECTIONS, caseSeenAt, caseType, caseTypeLabel, listCaseActivity, logActivity, touchCase, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
-  type Case, type CaseItems, type CaseMessage, type CasePriority, type CaseSection, type CaseTip,
+  type Case, type CaseActivity, type CaseItems, type CaseMessage, type CasePriority, type CaseSection, type CaseTip,
 } from '../lib/cases'
 import { CLIENT_DOC_KINDS, addDocument, addTask, deleteTask, docKindLabel, listAccess, listDocuments, listTasks, saveOrder, toggleTask, updateDocument, updateTask, type ClientDocument, type Task } from '../lib/project'
 import type { Brief, Client } from '../lib/types'
@@ -182,7 +182,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   const [inviting, setInviting] = useState<{ note: string; reminder: boolean } | null>(null)
   // przewodnik: przejście do sekcji i dokument otwarty z zadania
   const [jump, setJump] = useState<{ k: CaseSection; n: number } | null>(null)
-  const [reader, setReader] = useState<{ doc: ClientDocument; task?: Task } | null>(null)
+  const [reader, setReader] = useState<{ doc: ClientDocument; task?: Task; at: number } | null>(null)
   // klient wgrywa dokument prosto z zadania
   const [uploading, setUploading] = useState<Task | null>(null)
   // opis sprawy edytowany w miejscu, w dużym polu (wprowadzenie do sprawy bywa długie)
@@ -197,6 +197,14 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
     loadItems().catch((e) => toast((e as Error).message))
   }, [loadItems, toast])
 
+  // dziennik aktywności: wejście klienta do sprawy i sygnał obecności co 45 sekund
+  useEffect(() => {
+    if (isAdmin) return
+    logActivity(c.id, 'case_opened')
+    const t = setInterval(() => document.visibilityState === 'visible' && touchCase(c.id), 45_000)
+    return () => clearInterval(t)
+  }, [c.id, isAdmin])
+
   const run = async (fn: () => Promise<unknown>, msg?: string) => {
     try {
       await fn()
@@ -209,7 +217,8 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
 
   // dokument otwierany prosto z zadania albo z przewodnika
   const openDoc = async (doc: ClientDocument, task?: Task) => {
-    if (doc.content) return setReader({ doc, task })
+    if (!isAdmin) logActivity(c.id, 'document_opened', doc.title)
+    if (doc.content) return setReader({ doc, task, at: Date.now() })
     const p = doc.file?.path
     if (!p) return
     const u = (await signedUrls([p]))[p]
@@ -310,6 +319,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         <Spinner />
       ) : (
         <>
+          {isAdmin && <ActivityPanel c={c} items={items} reload={loadItems} />}
           {!locked && (
             <Guide
               steps={guide}
@@ -378,7 +388,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
                 <Closing c={c} isAdmin={isAdmin} run={run} />
               ),
             }
-            return <CaseStep key={`${c.id}-${k}`} k={k} jump={jump}>{el[k]}</CaseStep>
+            return <CaseStep key={`${c.id}-${k}`} k={k} jump={jump} onOpen={isAdmin ? undefined : () => logActivity(c.id, 'section_opened', SECTIONS.find((s) => s.key === k)?.label)}>{el[k]}</CaseStep>
           })}
         </>
       )}
@@ -405,6 +415,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
           onClose={() => setUploading(null)}
           onSave={async (title, file, _requires, _visible, note, kind) => {
             await addDocument(client.id, title, file, { requiresAcceptance: false, visible: true, note, caseId: c.id, kind })
+            logActivity(c.id, 'document_added', title)
             setUploading(null)
             await run(async () => {}, 'Dodano dokument. Gdy dodasz wszystko, odhacz zadanie.')
           }}
@@ -414,7 +425,10 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         <DocReader
           doc={reader.doc}
           isAdmin={isAdmin}
-          onClose={() => setReader(null)}
+          onClose={() => {
+            if (!isAdmin) logActivity(c.id, 'document_closed', reader.doc.title, { seconds: Math.round((Date.now() - reader.at) / 1000) })
+            setReader(null)
+          }}
           onSaved={async (content, title) => {
             await run(() => updateDocument(reader.doc.id, { content, title }), 'Zapisano zmiany')
             setReader({ ...reader, doc: { ...reader.doc, content, title } })
@@ -423,6 +437,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
             !isAdmin && !locked && reader.task && !reader.task.done_at && reader.task.assignee === 'client'
               ? async () => {
                   const t = reader.task!
+                  logActivity(c.id, 'document_read', reader.doc.title, { seconds: Math.round((Date.now() - reader.at) / 1000) })
                   setReader(null)
                   await run(() => toggleTask(t, false), 'Zadanie odhaczone')
                 }
@@ -447,6 +462,140 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
 
 /** Sekcja sprawy jako krok: startuje zwinięta, numer kroku liczy CSS (tylko sekcje faktycznie pokazane) */
 const StepCtx = createContext<{ open: boolean; toggle: () => void } | null>(null)
+
+/* ---------- aktywność klienta (widok administratorki) ---------- */
+
+const mmss = (s: number) => (s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`)
+/** Opis zdarzenia z dziennika, bezosobowo */
+function describeActivity(a: CaseActivity): string {
+  const l = a.label ? `: ${a.label}` : ''
+  const sec = typeof a.meta?.seconds === 'number' ? ` (${mmss(a.meta.seconds as number)})` : ''
+  switch (a.kind) {
+    case 'case_opened': return 'Wejście do sprawy'
+    case 'section_opened': return `Otwarta sekcja${l}`
+    case 'document_opened': return `Otwarty dokument${l}`
+    case 'document_closed': return `Zamknięty dokument${l}${sec ? `, czytany${sec}` : ''}`
+    case 'document_read': return `Potwierdzona lektura${l}${sec}`
+    case 'document_accepted': return `Zaakceptowany dokument${l}`
+    case 'document_added': return `Dodany dokument${l}`
+    case 'document_removed': return `Usunięty własny dokument${l}`
+    case 'task_done': return `Zadanie odhaczone${l}`
+    case 'task_undone': return `Zadanie cofnięte${l}`
+    case 'brief_opened': return `Otwarta ankieta${l}`
+    case 'brief_submitted': return `Wysłana ankieta${l}`
+    case 'access_updated': return `Dostęp${l}`
+    case 'media_added': return `Dodane zdjęcie, wideo albo link${l}`
+    case 'message_sent': return `Wiadomość w rozmowie${a.label ? ` ${a.label}` : ''}`
+    default: return `${a.kind}${l}`
+  }
+}
+const filled = (v: unknown) => (Array.isArray(v) ? v.length > 0 : typeof v === 'object' && v !== null ? Object.keys(v).length > 0 : v !== null && v !== undefined && String(v).trim() !== '')
+
+/** Podgląd na żywo: obecność klienta, postęp i dziennik zdarzeń. Odświeża się co 15 sekund. */
+function ActivityPanel({ c, items, reload }: { c: Case; items: CaseItems; reload: () => Promise<void> }) {
+  const [rows, setRows] = useState<CaseActivity[] | null>(null)
+  const [seen, setSeen] = useState<string | null>(c.client_seen_at ?? null)
+  const [all, setAll] = useState(false)
+  const [, setTick] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      try {
+        const [r, s] = await Promise.all([listCaseActivity(c.id), caseSeenAt(c.id)])
+        if (!alive) return
+        setRows(r)
+        setSeen(s)
+        setTick((n) => n + 1)
+      } catch {
+        /* przy błędzie zostaje poprzedni stan */
+      }
+    }
+    load()
+    const t = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      load()
+      reload().catch(() => {})
+    }, 15_000)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [c.id, reload])
+
+  const online = !!seen && Date.now() - new Date(seen).getTime() < 100_000
+  const briefs = items.briefs.filter((b) => b.status !== 'draft')
+  const tasks = items.tasks.filter((t) => t.assignee === 'client' && t.visible)
+  const access = items.access.filter((a) => a.status !== 'na')
+  const docs = items.documents.filter((d) => d.visible && d.from_admin !== false)
+  const openedDocs = new Set((rows ?? []).filter((r) => r.kind === 'document_opened' || r.kind === 'document_read').map((r) => r.label))
+  const fromClient = items.documents.filter((d) => d.from_admin === false).length
+  const shown = all ? rows ?? [] : (rows ?? []).slice(0, 8)
+
+  return (
+    <section className="card case-live">
+      <div className="case-guide-head">
+        <div style={{ minWidth: 0 }}>
+          <div className="eyebrow">Aktywność klienta na żywo</div>
+          <h3>
+            <span className={`live-dot${online ? ' on' : ''}`} />
+            {online ? 'Klient jest teraz w tej sprawie' : seen ? `Ostatnio w sprawie: ${fmtDate(seen)}` : 'Klient jeszcze nie otworzył tej sprawy'}
+          </h3>
+        </div>
+        <span className="muted" style={{ fontSize: 12.5 }}>odświeża się co 15 sekund</span>
+      </div>
+      <div className="live-stats">
+        {briefs.map((b) => {
+          const total = b.schema.sections.reduce((n, s) => n + s.questions.length, 0)
+          const done = Object.values(b.answers ?? {}).filter(filled).length
+          return (
+            <div key={b.id} className="live-stat">
+              <strong>{b.status === 'submitted' ? 'wysłana' : `${Math.min(done, total)} z ${total}`}</strong>
+              <span>ankieta{b.opened_at ? '' : ', jeszcze nieotwarta'}{b.status !== 'submitted' && done > 0 ? `, ostatni zapis ${fmtDate(b.updated_at)}` : ''}</span>
+            </div>
+          )
+        })}
+        <div className="live-stat">
+          <strong>{tasks.filter((t) => t.done_at).length} z {tasks.length}</strong>
+          <span>zadania odhaczone</span>
+        </div>
+        <div className="live-stat">
+          <strong>{docs.filter((d) => openedDocs.has(d.title)).length} z {docs.length}</strong>
+          <span>dokumenty otwarte</span>
+        </div>
+        <div className="live-stat">
+          <strong>{access.filter((a) => a.status === 'done').length} z {access.length}</strong>
+          <span>dostępy przekazane</span>
+        </div>
+        <div className="live-stat">
+          <strong>{fromClient}</strong>
+          <span>dokumenty dodane przez klienta</span>
+        </div>
+      </div>
+      {rows === null ? (
+        <p className="muted case-guide-sum">Wczytuję dziennik…</p>
+      ) : rows.length === 0 ? (
+        <p className="muted case-guide-sum">Dziennik jest pusty. Zdarzenia pojawią się, gdy klient wejdzie do sprawy.</p>
+      ) : (
+        <>
+          <ul className="live-log">
+            {shown.map((a) => (
+              <li key={a.id}>
+                <time>{fmtDate(a.created_at)}</time>
+                <span>{describeActivity(a)}</span>
+              </li>
+            ))}
+          </ul>
+          {rows.length > 8 && (
+            <button className="link-btn" onClick={() => setAll(!all)}>
+              {all ? 'pokaż mniej' : `pokaż wszystkie (${rows.length})`}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
 
 /* ---------- przewodnik: co teraz ---------- */
 
@@ -558,7 +707,7 @@ function Guide({ steps, isAdmin, hidden, onRemind }: { steps: GuideStep[]; isAdm
   )
 }
 
-function CaseStep({ k, jump, children }: { k: CaseSection; jump: { k: CaseSection; n: number } | null; children: ReactNode }) {
+function CaseStep({ k, jump, onOpen, children }: { k: CaseSection; jump: { k: CaseSection; n: number } | null; onOpen?: () => void; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   // przejście z przewodnika: rozwiń sekcję i przewiń do niej
@@ -569,7 +718,7 @@ function CaseStep({ k, jump, children }: { k: CaseSection; jump: { k: CaseSectio
   }, [jump, k])
   return (
     <div ref={ref} className={`case-step${open ? ' open' : ''}`}>
-      <StepCtx.Provider value={{ open, toggle: () => setOpen((o) => !o) }}>{children}</StepCtx.Provider>
+      <StepCtx.Provider value={{ open, toggle: () => { if (!open) onOpen?.(); setOpen(!open) } }}>{children}</StepCtx.Provider>
     </div>
   )
 }
@@ -693,7 +842,14 @@ function TasksBlock({ client, c, tasks, documents, briefs, onOpenDoc, onUpload, 
         return (
           <div key={t.id} className={`st-item task${isDone ? ' done' : ''}${!t.visible ? ' hidden-task' : ''}`}>
             {canTick ? (
-              <button className={`todo-check${isDone ? ' on' : ''}`} aria-label={t.done_at ? 'Oznacz jako niezrobione' : 'Potwierdź wykonanie'} onClick={() => run(() => toggleTask(t, isAdmin))}>
+              <button
+                className={`todo-check${isDone ? ' on' : ''}`}
+                aria-label={t.done_at ? 'Oznacz jako niezrobione' : 'Potwierdź wykonanie'}
+                onClick={() => {
+                  if (!isAdmin) logActivity(c.id, t.done_at ? 'task_undone' : 'task_done', t.title)
+                  run(() => toggleTask(t, isAdmin))
+                }}
+              >
                 {isDone ? '✓' : ''}
               </button>
             ) : (
@@ -975,6 +1131,7 @@ function CaseChat({ c, isAdmin }: { c: Case; isAdmin: boolean }) {
     setBusy(true)
     try {
       await sendCaseMessage(c, body.trim() || (file ? `Plik: ${file.name}` : ''), isAdmin, file ?? undefined)
+      if (!isAdmin) logActivity(c.id, 'message_sent', file ? `z plikiem ${file.name}` : null)
       setBody('')
       setFile(null)
       await load()
@@ -1559,6 +1716,7 @@ function MediaBlock({ c, isAdmin, locked }: { c: Case; isAdmin: boolean; locked:
     setBusy(true)
     try {
       for (const f of Array.from(list)) await addCaseFile(c, f)
+      if (!isAdmin) logActivity(c.id, 'media_added', Array.from(list).map((f) => f.name).join(', '))
       toast(list.length > 1 ? `Dodano ${list.length} pliki` : 'Dodano plik')
       await load()
     } catch (e) {
@@ -1598,6 +1756,7 @@ function MediaBlock({ c, isAdmin, locked }: { c: Case; isAdmin: boolean; locked:
               onClick={async () => {
                 try {
                   await addCaseLink(c, linkName.trim(), linkUrl.trim())
+                  if (!isAdmin) logActivity(c.id, 'media_added', linkName.trim())
                   setLinkName('')
                   setLinkUrl('')
                   setLinking(false)

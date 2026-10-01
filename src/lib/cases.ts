@@ -87,6 +87,8 @@ export interface Case {
   closed_at: string | null
   /** ostatnie powiadomienie e-mail z prośbą o dołączenie do sprawy */
   invited_at: string | null
+  /** kiedy klient był ostatnio w tej sprawie (sygnał obecności) */
+  client_seen_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -222,6 +224,43 @@ export async function inviteToCase(caseId: string, note: string, test = false, r
   const out = (await res.json().catch(() => ({}))) as { error?: string; to?: string }
   if (!res.ok) throw new Error(out.error ?? `Błąd ${res.status}`)
   return out.to ?? ''
+}
+
+/* ---------- aktywność klienta w sprawie ---------- */
+
+export interface CaseActivity {
+  id: number
+  case_id: string
+  from_admin: boolean
+  kind: string
+  label: string | null
+  meta: Record<string, unknown>
+  created_at: string
+}
+/** Zapis zdarzenia w dzienniku sprawy. Nie blokuje interfejsu i nigdy nie zgłasza błędu. */
+export function logActivity(caseId: string | null | undefined, kind: string, label?: string | null, meta: Record<string, unknown> = {}) {
+  if (!caseId) return
+  try {
+    void sb().rpc('log_case_activity', { p_case: caseId, p_kind: kind, p_label: label ?? null, p_meta: meta }).then(() => {}, () => {})
+  } catch {
+    /* dziennik nie może zepsuć pracy w panelu */
+  }
+}
+/** Sygnał, że klient ma otwartą sprawę */
+export function touchCase(caseId: string) {
+  try {
+    void sb().rpc('touch_case', { p_case: caseId }).then(() => {}, () => {})
+  } catch {
+    /* bez znaczenia dla pracy w panelu */
+  }
+}
+/** Administratorka: ostatnie zdarzenia klienta w sprawie i czas jego ostatniej obecności */
+export async function listCaseActivity(caseId: string, limit = 100): Promise<CaseActivity[]> {
+  return must(await sb().from('case_activity').select('*').eq('case_id', caseId).eq('from_admin', false).order('created_at', { ascending: false }).limit(limit))
+}
+export async function caseSeenAt(caseId: string): Promise<string | null> {
+  const { data } = await sb().from('cases').select('client_seen_at').eq('id', caseId).single()
+  return (data as { client_seen_at: string | null } | null)?.client_seen_at ?? null
 }
 
 /* ---------- zalecenia i porady ---------- */

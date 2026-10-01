@@ -4,6 +4,7 @@ import {
   ACCESS_CATALOG, ADMIN_EMAIL, addAccess, addAccessFromCatalog, clearCredentials, deleteAccess, getCredentials, listAccess, listSteps,
   setCredentials, updateAccess, type AccessItem, type AccessKind, type AccessStatus, type Credentials, type Step,
 } from '../lib/project'
+import { logActivity } from '../lib/cases'
 import { Field, Toggle } from './bits'
 
 const STATUS_LABEL: Record<AccessStatus, string> = { todo: 'Do przekazania', done: 'Przekazane', na: 'Nie dotyczy' }
@@ -45,6 +46,8 @@ export default function Access({
     }
     await load()
   }
+  // dziennik aktywności klienta w sprawie (administratorki nie zapisujemy)
+  const log = (label: string) => !isAdmin && logActivity(caseId, 'access_updated', label)
 
   if (!items) return <Spinner />
   const done = items.filter((i) => i.status !== 'todo').length
@@ -94,6 +97,7 @@ export default function Access({
           onToggle={() => setOpen(open === it.id ? null : it.id)}
           onEdit={() => setEditing(it)}
           run={run}
+          log={log}
         />
       ))}
 
@@ -126,7 +130,7 @@ export default function Access({
 }
 
 function AccessCard({
-  item, isAdmin, steps, open, onToggle, onEdit, run,
+  item, isAdmin, steps, open, onToggle, onEdit, run, log,
 }: {
   item: AccessItem
   isAdmin: boolean
@@ -135,11 +139,12 @@ function AccessCard({
   onToggle: () => void
   onEdit: () => void
   run: (fn: () => Promise<unknown>, msg?: string) => Promise<void>
+  log: (label: string) => void
 }) {
   const stepIdx = steps.findIndex((s) => s.id === item.step_id)
   return (
     <section className={`card acc${item.urgent && item.status === 'todo' ? ' acc-urgent' : ''}`}>
-      <button className="acc-head" onClick={onToggle} aria-expanded={open}>
+      <button className="acc-head" onClick={() => { if (!open) log(`${item.title}, otwarta instrukcja`); onToggle() }} aria-expanded={open}>
         <span className={`acc-dot acc-${item.status}`}>{item.status === 'done' ? '✓' : item.status === 'na' ? '-' : ''}</span>
         <span className="acc-title">
           <strong>{item.title}</strong>
@@ -177,22 +182,26 @@ function AccessCard({
               className="input"
               placeholder="np. dostęp ma nasz informatyk, pan Marek"
               defaultValue={item.note ?? ''}
-              onBlur={(e) => e.target.value !== (item.note ?? '') && run(() => updateAccess(item.id, { note: e.target.value || null }))}
+              onBlur={(e) => {
+                if (e.target.value === (item.note ?? '')) return
+                log(`${item.title}, notatka: ${e.target.value || 'usunięta'}`)
+                run(() => updateAccess(item.id, { note: e.target.value || null }))
+              }}
             />
           </label>
           <div className="row">
             {item.status !== 'done' && (
-              <button className="btn btn-sm btn-primary" onClick={() => run(() => updateAccess(item.id, { status: 'done' }), 'Dziękuję!')}>
+              <button className="btn btn-sm btn-primary" onClick={() => { log(`${item.title}, oznaczone jako przekazane`); run(() => updateAccess(item.id, { status: 'done' }), 'Dziękuję!') }}>
                 ✓ {item.kind === 'invite' ? 'Zaproszenie wysłane' : 'Przekazane'}
               </button>
             )}
             {item.status !== 'todo' && (
-              <button className="btn btn-sm" onClick={() => run(() => updateAccess(item.id, { status: 'todo' }))}>
+              <button className="btn btn-sm" onClick={() => { log(`${item.title}, oznaczone jako jeszcze nie przekazane`); run(() => updateAccess(item.id, { status: 'todo' })) }}>
                 Jeszcze nie przekazane
               </button>
             )}
             {item.status !== 'na' && (
-              <button className="btn btn-sm" onClick={() => run(() => updateAccess(item.id, { status: 'na' }))}>
+              <button className="btn btn-sm" onClick={() => { log(`${item.title}, oznaczone: nie mam takiego konta`); run(() => updateAccess(item.id, { status: 'na' })) }}>
                 Nie mam takiego konta
               </button>
             )}

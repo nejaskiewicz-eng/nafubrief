@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Icon, Modal, Spinner, copyText, fmtDate, useToast } from '../components/ui'
 import { renderMarkdown } from '../lib/markdown'
 import { CLIENT_DOC_KINDS, DOC_KINDS, acceptDocument, addDocument, deleteDocument, deleteDocumentNote, docKind, docKindLabel, listDocumentNotes, listDocuments, saveDocumentNote, updateDocument, type ClientDocument, type DocKind } from '../lib/project'
+import { logActivity } from '../lib/cases'
 import type { Client } from '../lib/types'
 import { signedUrls } from '../lib/workspace'
 import { Empty, Field, Toggle } from './bits'
@@ -24,6 +25,9 @@ export default function Documents({
   const [docs, setDocs] = useState<ClientDocument[] | null>(null)
   const [adding, setAdding] = useState(false)
   const [reading, setReading] = useState<ClientDocument | null>(null)
+  const [readAt, setReadAt] = useState(0)
+  // dziennik aktywności klienta w sprawie (administratorki nie zapisujemy)
+  const log = (kind: string, label?: string, meta?: Record<string, unknown>) => !isAdmin && logActivity(caseId, kind, label, meta)
   const [cat, setCat] = useState<DocKind | 'all'>('all')
 
   const load = useCallback(async () => {
@@ -45,7 +49,11 @@ export default function Documents({
   if (!docs) return <Spinner />
 
   const openFile = async (d: ClientDocument) => {
-    if (d.content) return setReading(d)
+    log('document_opened', d.title)
+    if (d.content) {
+      setReadAt(Date.now())
+      return setReading(d)
+    }
     const p = d.file?.path
     if (!p) return
     const u = (await signedUrls([p]))[p]
@@ -55,6 +63,7 @@ export default function Documents({
     if (!confirm(`Potwierdzasz, że zapoznałaś/eś się z dokumentem „${d.title}” i go akceptujesz?`)) return
     try {
       await acceptDocument(d.id)
+      log('document_accepted', d.title)
       toast('Dziękuję, dokument zaakceptowany')
       load()
     } catch (e) {
@@ -194,6 +203,7 @@ export default function Documents({
                         if (!confirm(`Usunąć „${d.title}”?`)) return
                         try {
                           await deleteDocument(d.id)
+                          log('document_removed', d.title)
                           load()
                         } catch (e) {
                           toast((e as Error).message)
@@ -289,6 +299,7 @@ export default function Documents({
               ? { requiresAcceptance: requires, visible, note, caseId, kind: only === 'contract' ? 'contract' : kind }
               : { requiresAcceptance: false, visible: true, note, caseId, kind })
             setAdding(false)
+            log('document_added', title)
             if (!isAdmin) toast('Dodano dokument')
             load()
           }}
@@ -298,7 +309,10 @@ export default function Documents({
         <DocReader
           doc={reading}
           isAdmin={isAdmin}
-          onClose={() => setReading(null)}
+          onClose={() => {
+            log('document_closed', reading.title, { seconds: Math.round((Date.now() - readAt) / 1000) })
+            setReading(null)
+          }}
           onSaved={async (content, title) => {
             await updateDocument(reading.id, { content, title })
             setReading({ ...reading, content, title })

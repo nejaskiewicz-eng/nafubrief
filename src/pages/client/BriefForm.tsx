@@ -4,6 +4,7 @@ import { QuestionField } from '../../components/QuestionField'
 import { CONTACT, Check, Icon, Loading, Modal } from '../../components/ui'
 import { api } from '../../lib/api'
 import { isVisible, missingRequired, sectionProgress, surveyProgress } from '../../lib/format'
+import { logActivity } from '../../lib/cases'
 import type { AnswerValue, Answers, Brief, PublicBrief } from '../../lib/types'
 import { useClientCtx } from './ClientArea'
 
@@ -26,7 +27,10 @@ export default function BriefFormPage() {
       if (session && mine) {
         const b = (await api.myBriefs(mine.id)).find((x) => x.slug === brief)
         if (b) {
-          if (!session.preview) api.openMyBrief(b.id)
+          if (!session.preview) {
+            api.openMyBrief(b.id)
+            logActivity(b.case_id, 'brief_opened', b.title)
+          }
           const data: PublicBrief = {
             status: b.status, title: b.title, description: b.description, intro: b.intro, schema: b.schema,
             answers: b.answers, client_name: mine.company || mine.name, submitted_at: b.submitted_at,
@@ -65,7 +69,13 @@ export default function BriefFormPage() {
       urgent={b.urgent && b.status !== 'submitted'}
       backHref={`/${client}`}
       account={<AccountBar email={state.email} />}
-      saver={{ id: b.id, save: (a, submit) => api.saveMyBrief(b.id, a, submit) }}
+      saver={{
+        id: b.id,
+        save: async (a, submit) => {
+          await api.saveMyBrief(b.id, a, submit)
+          if (submit) logActivity(b.case_id, 'brief_submitted', b.title)
+        },
+      }}
     />
   )
 }
