@@ -441,9 +441,12 @@ function buildGuide({ c, client, items, isAdmin, go, openDoc }: { c: Case; clien
   for (const k of c.sections ?? []) {
     if (k === 'tasks') {
       for (const t of items.tasks.filter((x) => x.assignee === 'client' && x.visible)) {
-        const doc = t.document_id ? items.documents.find((d) => d.id === t.document_id && d.visible) : undefined
+        // administratorka widzi przycisk także przy szkicu dokumentu, z ostrzeżeniem, że klient go jeszcze nie zobaczy
+        const doc = t.document_id ? items.documents.find((d) => d.id === t.document_id && (isAdmin || d.visible)) : undefined
+        const draft = isAdmin && doc && !doc.visible
         steps.push({
-          key: `t-${t.id}`, label: t.title, hint: t.due_date ? `do ${fmtDay(t.due_date)}` : undefined, done: !!t.done_at,
+          key: `t-${t.id}`, label: t.title, done: !!t.done_at,
+          hint: [t.due_date ? `do ${fmtDay(t.due_date)}` : '', draft ? 'dokument jest szkicem, klient nie zobaczy przycisku „Czytaj”, dopóki go nie udostępnisz' : ''].filter(Boolean).join(' · ') || undefined,
           action: doc ? { label: doc.content ? 'Czytaj' : 'Otwórz', onClick: () => openDoc(doc, t) } : { label: 'Pokaż', onClick: () => go('tasks') },
         })
       }
@@ -496,7 +499,7 @@ function Guide({ steps, isAdmin, hidden, onRemind }: { steps: GuideStep[]; isAdm
           <h3>{steps.length === 0 ? 'Klient nie ma jeszcze nic do zrobienia' : next ? next.label : isAdmin ? 'Klient ma wszystko zrobione' : 'Wszystko zrobione. Dziękuję!'}</h3>
           {next?.hint && <p className="muted">{next.hint}</p>}
         </div>
-        {!isAdmin && next?.action && <GuideAction a={next.action} primary />}
+        {next?.action && <GuideAction a={next.action} primary={!isAdmin} />}
         {onRemind && (
           <button className="btn btn-sm" onClick={onRemind}>
             <Icon name="mail" size={15} /> Przypomnij e-mailem
