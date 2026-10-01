@@ -31,10 +31,12 @@ export const handler: Handler = async (event) => {
 
   let caseId = ''
   let note = ''
+  let test = false
   try {
-    const b = JSON.parse(event.body || '{}') as { caseId?: string; note?: string }
+    const b = JSON.parse(event.body || '{}') as { caseId?: string; note?: string; test?: boolean }
     caseId = b.caseId || ''
     note = (b.note || '').trim().slice(0, 2000)
+    test = b.test === true
   } catch {
     return json(400, { error: 'Nieprawidłowe dane.' })
   }
@@ -46,25 +48,27 @@ export const handler: Handler = async (event) => {
   if (c.status === 'closed') return json(409, { error: 'Sprawa jest zamknięta.' })
   const { data: cl } = await db.from('clients').select('slug, name, company, email, login_email, address_form, salutation').eq('id', c.client_id).single<ClientRow>()
   if (!cl) return json(404, { error: 'Nie znaleziono klienta.' })
-  const to = cl.login_email || cl.email
-  if (!to) return json(400, { error: 'Klient nie ma adresu e-mail. Uzupełnij go w danych klienta.' })
+  const clientTo = cl.login_email || cl.email
+  if (!clientTo) return json(400, { error: 'Klient nie ma adresu e-mail. Uzupełnij go w danych klienta.' })
+  // test: ten sam e-mail co dla klienta, ale do administratorki
+  const to = test ? process.env.NOTIFY_EMAIL || 'n.e.jaskiewicz@gmail.com' : clientTo
 
   const site = (process.env.VITE_SITE_URL || process.env.URL || '').replace(/\/$/, '')
   const link = `${site}/${cl.slug}/sprawy?sprawa=${c.id}`
   const { subject, html } = renderCaseInvite({
-    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: c.description, due: c.due_date, note, login: to, link,
+    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: c.description, due: c.due_date, note, login: clientTo, link,
   })
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, reply_to: process.env.NOTIFY_EMAIL || undefined, subject, html }),
+    body: JSON.stringify({ from, to, reply_to: process.env.NOTIFY_EMAIL || undefined, subject: test ? `[TEST] ${subject}` : subject, html }),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     return json(502, { error: `Nie udało się wysłać e-maila (${res.status}). ${detail.slice(0, 200)}` })
   }
-  await db.from('cases').update({ invited_at: new Date().toISOString() }).eq('id', c.id)
+  if (!test) await db.from('cases').update({ invited_at: new Date().toISOString() }).eq('id', c.id)
   return json(200, { ok: true, to })
 }
 

@@ -281,10 +281,10 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
           c={c}
           client={client}
           onClose={() => setInviting(false)}
-          onSend={async (note) => {
-            const to = await inviteToCase(c.id, note)
-            setInviting(false)
-            await run(async () => {}, `Wysłano powiadomienie na ${to}`)
+          onSend={async (note, test) => {
+            const to = await inviteToCase(c.id, note, test)
+            if (!test) setInviting(false)
+            await run(async () => {}, test ? `Wysłano test na ${to}` : `Wysłano powiadomienie na ${to}`)
           }}
         />
       )}
@@ -792,7 +792,7 @@ function Closing({ c, isAdmin, run }: { c: Case; isAdmin: boolean; run: (fn: () 
   )
 }
 
-function InviteCase({ c, client, onClose, onSend }: { c: Case; client: Client; onClose: () => void; onSend: (note: string) => Promise<void> }) {
+function InviteCase({ c, client, onClose, onSend }: { c: Case; client: Client; onClose: () => void; onSend: (note: string, test: boolean) => Promise<void> }) {
   const toast = useToast()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -818,12 +818,27 @@ function InviteCase({ c, client, onClose, onSend }: { c: Case; client: Client; o
           Anuluj
         </button>
         <button
+          className="btn"
+          disabled={busy || !to}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await onSend(note.trim(), true)
+            } catch (e) {
+              toast((e as Error).message)
+            }
+            setBusy(false)
+          }}
+        >
+          Wyślij test do mnie
+        </button>
+        <button
           className="btn btn-primary"
           disabled={busy || !to}
           onClick={async () => {
             setBusy(true)
             try {
-              await onSend(note.trim())
+              await onSend(note.trim(), false)
             } catch (e) {
               toast((e as Error).message)
               setBusy(false)
