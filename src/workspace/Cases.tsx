@@ -939,8 +939,12 @@ function SectionsPicker({ c, run }: { c: Case; run: (fn: () => Promise<unknown>,
   const [open, setOpen] = useState(false)
   const [order, setOrder] = useState<CaseSection[]>(c.sections ?? [])
   const [drag, setDrag] = useState<CaseSection | null>(null)
-  const [over, setOver] = useState<CaseSection | null>(null)
-  useEffect(() => setOrder(c.sections ?? []), [c.sections])
+  const listRef = useRef<HTMLDivElement>(null)
+  const startOrder = useRef<CaseSection[]>([])
+  const liveOrder = useRef<CaseSection[]>([])
+  useEffect(() => {
+    if (!drag) setOrder(c.sections ?? [])
+  }, [c.sections]) // eslint-disable-line react-hooks/exhaustive-deps
   const label = (k: CaseSection) => SECTIONS.find((s) => s.key === k)
   const off = SECTIONS.map((s) => s.key).filter((k) => !order.includes(k))
   const save = (next: CaseSection[]) => {
@@ -952,6 +956,52 @@ function SectionsPicker({ c, run }: { c: Case; run: (fn: () => Promise<unknown>,
     rest.splice(Math.max(0, Math.min(to, rest.length)), 0, k)
     save(rest)
   }
+
+  // Przeciąganie na zdarzeniach wskaźnika: działa tak samo myszą, gładzikiem i palcem.
+  const onPointerDown = (e: { button: number; target: EventTarget; preventDefault(): void }, k: CaseSection) => {
+    if (e.button !== 0) return
+    const t = e.target as HTMLElement
+    if (t.closest('input, button, a, label')) return
+    e.preventDefault()
+    startOrder.current = order
+    liveOrder.current = order
+    setDrag(k)
+    const onMove = (ev: PointerEvent) => {
+      const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-sec]') ?? [])
+      setOrder((cur) => {
+        const others = cur.filter((x) => x !== k)
+        let idx = others.length
+        for (let i = 0; i < others.length; i++) {
+          const row = rows.find((r) => r.dataset.sec === others[i])
+          if (!row) continue
+          const box = row.getBoundingClientRect()
+          if (ev.clientY < box.top + box.height / 2) {
+            idx = i
+            break
+          }
+        }
+        const next = [...others]
+        next.splice(idx, 0, k)
+        if (next.join() === cur.join()) return cur
+        liveOrder.current = next
+        return next
+      })
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      document.body.classList.remove('is-sorting')
+      setDrag(null)
+      const final = liveOrder.current
+      if (final.join() !== startOrder.current.join()) run(() => updateCase(c.id, { sections: final }))
+    }
+    document.body.classList.add('is-sorting')
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }
+
   return (
     <div className={`case-sections${open ? ' is-open' : ''}`}>
       <button className="case-sections-head" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -962,32 +1012,14 @@ function SectionsPicker({ c, run }: { c: Case; run: (fn: () => Promise<unknown>,
         <Icon name={open ? 'up' : 'down'} size={16} />
       </button>
       {open && (
-        <div className="case-sections-list">
-          <p className="muted" style={{ margin: '0 0 4px', fontSize: 13 }}>Przeciągnij, żeby zmienić kolejność. Klient widzi tylko włączone sekcje, w tej samej kolejności.</p>
+        <div className="case-sections-list" ref={listRef}>
+          <p className="muted" style={{ margin: '0 0 4px', fontSize: 13 }}>Złap wiersz i przeciągnij, żeby zmienić kolejność. Klient widzi tylko włączone sekcje, w tej samej kolejności.</p>
           {order.map((k, i) => (
             <div
               key={k}
-              className={`case-sections-item draggable${drag === k ? ' dragging' : ''}${over === k && drag !== k ? ' over' : ''}`}
-              draggable
-              onDragStart={(e) => {
-                setDrag(k)
-                e.dataTransfer.effectAllowed = 'move'
-              }}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setOver(k)
-              }}
-              onDragLeave={() => setOver((o) => (o === k ? null : o))}
-              onDrop={(e) => {
-                e.preventDefault()
-                if (drag && drag !== k) move(drag, order.indexOf(k))
-                setDrag(null)
-                setOver(null)
-              }}
-              onDragEnd={() => {
-                setDrag(null)
-                setOver(null)
-              }}
+              data-sec={k}
+              className={`case-sections-item draggable${drag === k ? ' dragging' : ''}`}
+              onPointerDown={(e) => onPointerDown(e, k)}
             >
               <span className="drag-handle" aria-hidden>⋮⋮</span>
               <input type="checkbox" checked onChange={() => save(order.filter((x) => x !== k))} aria-label={`Wyłącz sekcję ${label(k)?.label}`} />

@@ -3949,12 +3949,23 @@ button.case-row:hover {
   background: var(--surface-2);
   cursor: grab;
 }
-.case-sections-item.draggable.dragging {
-  opacity: 0.45;
+.case-sections-item.draggable {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.case-sections-item.draggable.over {
+.case-sections-item.draggable.dragging {
   border-color: var(--teal);
-  box-shadow: 0 -3px 0 var(--teal) inset;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgba(10, 113, 137, 0.18);
+  cursor: grabbing;
+  position: relative;
+  z-index: 2;
+}
+body.is-sorting,
+body.is-sorting * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 .case-sections-item.off {
   padding: 6px 8px;
