@@ -31,11 +31,49 @@ export const SECTIONS: Array<{ key: CaseSection; label: string; hint: string }> 
   { key: 'closing', label: 'Akceptacja i zamknięcie', hint: 'prośba o akceptację, podsumowanie, zamknięcie' },
 ]
 export const PRIORITY_LABEL: Record<CasePriority, string> = { normal: 'Zwykła', important: 'Ważne', urgent: 'Pilne', very_urgent: 'Bardzo pilne' }
+/** Rodzaj sprawy = szablon startowy: sekcje i (opcjonalnie) zadania-szkice. Wszystko można potem zmienić w samej sprawie. */
+export interface CaseType {
+  key: string
+  label: string
+  hint: string
+  sections: CaseSection[]
+  /** zadania dodawane jako ukryte szkice, do dopracowania przed pokazaniem klientowi */
+  tasks?: Array<{ title: string; note: string; assignee: 'client' | 'nafu' }>
+}
+export const CASE_TYPES: CaseType[] = [
+  { key: 'brand', label: 'Identyfikacja wizualna', hint: 'logo, kolory, typografia, księga znaku', sections: ['tasks', 'briefs', 'documents', 'media', 'chat', 'closing'] },
+  { key: 'website', label: 'Strona internetowa', hint: 'projekt i wykonanie strony', sections: ['tasks', 'briefs', 'contracts', 'documents', 'access', 'media', 'chat', 'closing'] },
+  { key: 'website_mech', label: 'Strona internetowa: mechanizm', hint: 'funkcje i mechanizmy strony', sections: ['tasks', 'briefs', 'documents', 'access', 'chat', 'closing'] },
+  { key: 'mentoring', label: 'Mentoring', hint: 'spotkania, zalecenia, zadania do wykonania', sections: ['tasks', 'tips', 'documents', 'chat', 'closing'] },
+  { key: 'graphics', label: 'Projekty graficzne', hint: 'materiały drukowane i cyfrowe', sections: ['tasks', 'briefs', 'media', 'documents', 'chat', 'closing'] },
+  {
+    key: 'audit', label: 'Audyt', hint: 'sprawdzenie działań, dowody, raport', sections: ['tasks', 'briefs', 'documents', 'access', 'media', 'chat', 'closing'],
+    tasks: [
+      { title: 'Umowa z wykonawcą i aneksy', note: 'Dodaj w sekcji Dokumenty tej sprawy skan albo zdjęcia umowy, razem z aneksami i ofertą sprzed podpisania.', assignee: 'client' },
+      { title: 'Faktury od wykonawcy z całego okresu współpracy', note: 'Dodaj w sekcji Dokumenty tej sprawy wszystkie faktury od początku współpracy.', assignee: 'client' },
+      { title: 'Raporty i wiadomości od wykonawcy', note: 'Dodaj w sekcji Dokumenty tej sprawy raporty, zestawienia i ważne wiadomości.', assignee: 'client' },
+    ],
+  },
+  { key: 'social', label: 'Wsparcie SM w pojedynczej sprawie', hint: 'media społecznościowe, jedna konkretna potrzeba', sections: ['tasks', 'tips', 'access', 'media', 'chat', 'closing'] },
+  { key: 'ai', label: 'Wdrożenie AI', hint: 'narzędzia i automatyzacje z AI', sections: ['tasks', 'briefs', 'tips', 'documents', 'access', 'chat', 'closing'] },
+  { key: 'project', label: 'Prowadzenie projektu', hint: 'koordynacja większego przedsięwzięcia', sections: ['tasks', 'tips', 'documents', 'media', 'chat', 'closing'] },
+  { key: 'event', label: 'Organizacja eventu', hint: 'wydarzenie od planu do realizacji', sections: ['tasks', 'briefs', 'documents', 'media', 'chat', 'closing'] },
+  { key: 'current', label: 'Sprawa bieżąca', hint: 'pojedynczy temat do załatwienia', sections: ['tasks', 'documents', 'chat', 'closing'] },
+  { key: 'other', label: 'Inne', hint: 'własna nazwa rodzaju sprawy', sections: ['tasks', 'briefs', 'documents', 'access', 'chat', 'closing'] },
+]
+export const caseType = (key?: string | null) => CASE_TYPES.find((t) => t.key === key)
+/** Nazwa rodzaju sprawy do pokazania (przy „Inne” własna nazwa) */
+export const caseTypeLabel = (c: { type?: string | null; type_label?: string | null }) =>
+  c.type === 'other' ? c.type_label?.trim() || 'Inne' : caseType(c.type)?.label ?? ''
+
 export interface Case {
   id: string
   client_id: string
   title: string
   description: string | null
+  /** rodzaj sprawy (klucz z CASE_TYPES) i własna nazwa przy „Inne” */
+  type?: string | null
+  type_label?: string | null
   status: CaseStatus
   /** kategoria pilności */
   priority: CasePriority
@@ -76,10 +114,10 @@ export const CASE_BADGE: Record<CaseStatus, string> = { open: 'in_progress', rev
 export async function listCases(clientId: string): Promise<Case[]> {
   return must(await sb().from('cases').select('*').eq('client_id', clientId).order('updated_at', { ascending: false }))
 }
-export async function createCase(c: { client_id: string; title: string; description?: string | null; due_date?: string | null; priority?: CasePriority; created_by: 'admin' | 'client' }): Promise<Case> {
+export async function createCase(c: { client_id: string; title: string; description?: string | null; due_date?: string | null; priority?: CasePriority; created_by: 'admin' | 'client'; type?: string | null; type_label?: string | null; sections?: CaseSection[] }): Promise<Case> {
   return must(await sb().from('cases').insert(c).select().single())
 }
-export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'priority' | 'sections' | 'summary' | 'status' | 'closed_at' | 'accepted_at'>>) {
+export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'priority' | 'sections' | 'summary' | 'status' | 'closed_at' | 'accepted_at' | 'type' | 'type_label'>>) {
   must(await sb().from('cases').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))
 }
 export async function deleteCase(id: string) {

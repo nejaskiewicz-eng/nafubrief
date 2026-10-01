@@ -4302,3 +4302,33 @@ body.is-sorting * {
   margin: 0;
   font-size: 13px;
 }
+
+/* ---------- sprawy: rodzaj sprawy ---------- */
+
+.case-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.case-types button {
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  padding: 7px 13px;
+  font: 600 13.5px/1 var(--font);
+  color: var(--muted);
+  cursor: pointer;
+}
+.case-types button:hover {
+  color: var(--ink);
+  border-color: var(--teal);
+}
+.case-types button.on {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #042028;
+}
+.badge.case-type {
+  background: #e8eef0;
+  color: #24424c;
+}

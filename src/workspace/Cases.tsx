@@ -4,7 +4,7 @@ import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../compone
 import { api } from '../lib/api'
 import { renderMarkdown } from '../lib/markdown'
 import {
-  CASE_BADGE, CASE_STATUS, PRIORITY_LABEL, SECTIONS, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
+  CASE_BADGE, CASE_STATUS, CASE_TYPES, PRIORITY_LABEL, SECTIONS, caseType, caseTypeLabel, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
   type Case, type CaseItems, type CaseMessage, type CasePriority, type CaseSection, type CaseTip,
 } from '../lib/cases'
@@ -77,8 +77,16 @@ export default function Cases({ client, isAdmin }: { client: Client; isAdmin: bo
         <NewCase
           isAdmin={isAdmin}
           onClose={() => setCreating(false)}
-          onSave={async (title, description, due, priority) => {
-            const c = await createCase({ client_id: client.id, title, description: description || null, due_date: due || null, priority, created_by: isAdmin ? 'admin' : 'client' })
+          onSave={async (title, description, due, priority, type, typeLabel) => {
+            const tpl = caseType(type)
+            const c = await createCase({
+              client_id: client.id, title, description: description || null, due_date: due || null, priority, created_by: isAdmin ? 'admin' : 'client',
+              type, type_label: type === 'other' ? typeLabel || null : null, ...(tpl ? { sections: tpl.sections } : {}),
+            })
+            // szablon rodzaju sprawy: zadania startowe jako ukryte szkice (tylko gdy sprawę zakłada administratorka)
+            if (isAdmin && tpl?.tasks?.length) {
+              for (const [i, t] of tpl.tasks.entries()) await addTask({ client_id: client.id, case_id: c.id, title: t.title, note: t.note, assignee: t.assignee, visible: false, position: i })
+            }
             setCreating(false)
             await load()
             open(c.id)
@@ -101,6 +109,7 @@ function CaseList({ title, list, unread, isAdmin, onOpen }: { title: string; lis
           <div style={{ minWidth: 0, textAlign: 'left' }}>
             <h3>{c.title}</h3>
             <div className="meta">
+              {caseTypeLabel(c) && <span className="badge case-type">{caseTypeLabel(c)}</span>}
               <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
               {c.priority !== 'normal' && c.status !== 'closed' && <span className={`badge ${c.priority === 'important' ? 'important' : 'urgent'}`}>{PRIORITY_LABEL[c.priority]}</span>}
               {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
@@ -118,8 +127,10 @@ function CaseList({ title, list, unread, isAdmin, onOpen }: { title: string; lis
   )
 }
 
-function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () => void; onSave: (title: string, description: string, due: string, priority: CasePriority) => Promise<void> }) {
+function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () => void; onSave: (title: string, description: string, due: string, priority: CasePriority, type: string, typeLabel: string) => Promise<void> }) {
   const toast = useToast()
+  const [type, setType] = useState('current')
+  const [typeLabel, setTypeLabel] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [due, setDue] = useState('')
@@ -130,6 +141,7 @@ function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () =
       <div className="eyebrow">Sprawy bieżące</div>
       <h2 style={{ marginTop: 8, marginBottom: 14 }}>Nowa sprawa</h2>
       <div className="stack">
+        <TypePick value={type} onChange={setType} label={typeLabel} onLabel={setTypeLabel} showSections={isAdmin} />
         <Field label="Temat" value={title} onChange={setTitle} placeholder={isAdmin ? 'np. Dokumenty prawne dla obecnej strony' : 'np. Zmiana godzin otwarcia na stronie'} />
         <Field label="Opis" value={description} onChange={setDescription} textarea placeholder={isAdmin ? 'Co trzeba zrobić i czego potrzebuję od klienta' : 'Opisz, czego dotyczy sprawa'} />
         <PriorityPick value={priority} onChange={setPriority} />
@@ -144,9 +156,10 @@ function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () =
           disabled={busy}
           onClick={async () => {
             if (!title.trim()) return toast('Podaj temat sprawy.')
+            if (type === 'other' && !typeLabel.trim()) return toast('Wpisz rodzaj sprawy.')
             setBusy(true)
             try {
-              await onSave(title.trim(), description.trim(), due, priority)
+              await onSave(title.trim(), description.trim(), due, priority, type, typeLabel.trim())
             } catch (e) {
               toast((e as Error).message)
               setBusy(false)
@@ -249,6 +262,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
 
       <section className="card case-head">
         <div className="meta">
+          {caseTypeLabel(c) && <span className="badge case-type">{caseTypeLabel(c)}</span>}
           <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
           {c.priority !== 'normal' && <span className={`badge ${c.priority === 'important' ? 'important' : 'urgent'}`}>{PRIORITY_LABEL[c.priority]}</span>}
           {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
@@ -1152,11 +1166,14 @@ function EditCase({ c, isAdmin, onClose, onSave }: { c: Case; isAdmin: boolean; 
   const [description, setDescription] = useState(c.description ?? '')
   const [due, setDue] = useState(c.due_date ?? '')
   const [priority, setPriority] = useState<CasePriority>(c.priority)
+  const [type, setType] = useState(c.type ?? '')
+  const [typeLabel, setTypeLabel] = useState(c.type_label ?? '')
   return (
     <Modal label="Edytuj sprawę" onClose={onClose}>
       <div className="eyebrow">Sprawy bieżące</div>
       <h2 style={{ marginTop: 8, marginBottom: 14 }}>Edytuj sprawę</h2>
       <div className="stack">
+        <TypePick value={type} onChange={setType} label={typeLabel} onLabel={setTypeLabel} />
         <Field label="Temat" value={title} onChange={setTitle} />
         <Field label="Opis" value={description} onChange={setDescription} textarea />
         <PriorityPick value={priority} onChange={setPriority} />
@@ -1169,12 +1186,36 @@ function EditCase({ c, isAdmin, onClose, onSave }: { c: Case; isAdmin: boolean; 
         <button
           className="btn btn-primary"
           disabled={!title.trim()}
-          onClick={() => onSave({ title: title.trim(), description: description.trim() || null, priority, ...(isAdmin ? { due_date: due || null } : {}) })}
+          onClick={() => onSave({ title: title.trim(), description: description.trim() || null, priority, type: type || null, type_label: type === 'other' ? typeLabel.trim() || null : null, ...(isAdmin ? { due_date: due || null } : {}) })}
         >
           Zapisz
         </button>
       </div>
     </Modal>
+  )
+}
+
+/** Wybór rodzaju sprawy. Przy zakładaniu rodzaj ustawia sekcje startowe; w istniejącej sprawie zmienia tylko etykietę. */
+function TypePick({ value, onChange, label, onLabel, showSections }: { value: string; onChange: (v: string) => void; label: string; onLabel: (v: string) => void; showSections?: boolean }) {
+  const tpl = caseType(value)
+  return (
+    <div className="field">
+      <span className="label">Rodzaj sprawy</span>
+      <div className="case-types" role="radiogroup" aria-label="Rodzaj sprawy">
+        {CASE_TYPES.map((t) => (
+          <button key={t.key} type="button" role="radio" aria-checked={value === t.key} title={t.hint} className={value === t.key ? 'on' : ''} onClick={() => onChange(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {value === 'other' && <input className="input" style={{ marginTop: 8 }} value={label} onChange={(e) => onLabel(e.target.value)} placeholder="Wpisz rodzaj sprawy" aria-label="Własny rodzaj sprawy" />}
+      {showSections && tpl && (
+        <span className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+          Sekcje na start: {tpl.sections.map((k) => SECTIONS.find((s) => s.key === k)?.label).filter(Boolean).join(', ')}
+          {tpl.tasks?.length ? `. Zadania-szkice: ${tpl.tasks.length}` : ''}. Wszystko zmienisz potem w sprawie.
+        </span>
+      )}
+    </div>
   )
 }
 
