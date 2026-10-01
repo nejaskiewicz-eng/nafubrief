@@ -137,7 +137,7 @@ export default function Documents({
           {g.list.map((d) => {
             const fromClient = d.from_admin === false
             return (
-            <div className="brief-row" key={d.id}>
+            <div className="brief-row doc-row" key={d.id}>
               <div className="brief-icon" style={{ background: fromClient ? 'linear-gradient(135deg,#b7791f,#e0a84a)' : d.visible ? 'linear-gradient(135deg,#0a7189,#02afca)' : '#8aa0a7' }}>
                 <Icon name="doc" size={20} />
               </div>
@@ -177,6 +177,73 @@ export default function Documents({
                   ))}
                   <span>dodano {fmtDate(d.created_at)}</span>
                 </div>
+                <div className="actions doc-actions">
+                  <button className="btn btn-sm" onClick={() => openFile(d)}>
+                    <Icon name="eye" size={15} /> {d.content ? 'Czytaj' : 'Otwórz'}
+                  </button>
+                  {!isAdmin && d.requires_acceptance && !d.accepted_at && (
+                    <button className="btn btn-sm btn-primary" onClick={() => accept(d)}>
+                      ✓ Akceptuję
+                    </button>
+                  )}
+                  {!isAdmin && fromClient && !locked && (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      aria-label="Usuń dokument"
+                      onClick={async () => {
+                        if (!confirm(`Usunąć „${d.title}”?`)) return
+                        try {
+                          await deleteDocument(d.id)
+                          load()
+                        } catch (e) {
+                          toast((e as Error).message)
+                        }
+                      }}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  )}
+                  {isAdmin && fromClient && (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      aria-label="Usuń dokument"
+                      onClick={async () => {
+                        if (!confirm(`Usunąć „${d.title}”? To dokument dodany przez klienta.`)) return
+                        await deleteDocument(d.id)
+                        load()
+                      }}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  )}
+                  {isAdmin && !fromClient && (
+                    <>
+                      <button
+                        className={`btn btn-sm ${d.visible ? '' : 'btn-primary'}`}
+                        onClick={async () => {
+                          if (!d.visible && d.content?.includes('[DO UZUPEŁNIENIA')) {
+                            if (!confirm('W treści są jeszcze znaczniki [DO UZUPEŁNIENIA]. Klient je zobaczy. Udostępnić mimo to?')) return
+                          }
+                          await updateDocument(d.id, { visible: !d.visible })
+                          toast(d.visible ? 'Ukryto przed klientem' : 'Udostępniono klientowi')
+                          load()
+                        }}
+                      >
+                        {d.visible ? 'Ukryj przed klientem' : 'Udostępnij klientowi'}
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={async () => {
+                          if (!confirm(`Usunąć „${d.title}”?`)) return
+                          await deleteDocument(d.id)
+                          load()
+                        }}
+                      >
+                        <Icon name="trash" size={15} />
+                      </button>
+                    </>
+                  )}
+                </div>
                 {isAdmin && fromClient ? (
                   <>
                     {d.note && (
@@ -202,73 +269,6 @@ export default function Documents({
                   )
                 )}
                 {isAdmin && d.content?.includes('[DO UZUPEŁNIENIA') && <span className="badge in_progress" style={{ marginTop: 6 }}>Są miejsca do uzupełnienia</span>}
-              </div>
-              <div className="actions">
-                <button className="btn btn-sm" onClick={() => openFile(d)}>
-                  <Icon name="eye" size={15} /> {d.content ? 'Czytaj' : 'Otwórz'}
-                </button>
-                {!isAdmin && d.requires_acceptance && !d.accepted_at && (
-                  <button className="btn btn-sm btn-primary" onClick={() => accept(d)}>
-                    ✓ Akceptuję
-                  </button>
-                )}
-                {!isAdmin && fromClient && !locked && (
-                  <button
-                    className="btn btn-sm btn-danger"
-                    aria-label="Usuń dokument"
-                    onClick={async () => {
-                      if (!confirm(`Usunąć „${d.title}”?`)) return
-                      try {
-                        await deleteDocument(d.id)
-                        load()
-                      } catch (e) {
-                        toast((e as Error).message)
-                      }
-                    }}
-                  >
-                    <Icon name="trash" size={15} />
-                  </button>
-                )}
-                {isAdmin && fromClient && (
-                  <button
-                    className="btn btn-sm btn-danger"
-                    aria-label="Usuń dokument"
-                    onClick={async () => {
-                      if (!confirm(`Usunąć „${d.title}”? To dokument dodany przez klienta.`)) return
-                      await deleteDocument(d.id)
-                      load()
-                    }}
-                  >
-                    <Icon name="trash" size={15} />
-                  </button>
-                )}
-                {isAdmin && !fromClient && (
-                  <>
-                    <button
-                      className={`btn btn-sm ${d.visible ? '' : 'btn-primary'}`}
-                      onClick={async () => {
-                        if (!d.visible && d.content?.includes('[DO UZUPEŁNIENIA')) {
-                          if (!confirm('W treści są jeszcze znaczniki [DO UZUPEŁNIENIA]. Klient je zobaczy. Udostępnić mimo to?')) return
-                        }
-                        await updateDocument(d.id, { visible: !d.visible })
-                        toast(d.visible ? 'Ukryto przed klientem' : 'Udostępniono klientowi')
-                        load()
-                      }}
-                    >
-                      {d.visible ? 'Ukryj przed klientem' : 'Udostępnij klientowi'}
-                    </button>
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={async () => {
-                        if (!confirm(`Usunąć „${d.title}”?`)) return
-                        await deleteDocument(d.id)
-                        load()
-                      }}
-                    >
-                      <Icon name="trash" size={15} />
-                    </button>
-                  </>
-                )}
               </div>
             </div>
             )

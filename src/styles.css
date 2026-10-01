@@ -4332,3 +4332,11 @@ body.is-sorting * {
   background: #e8eef0;
   color: #24424c;
 }
+
+/* dokumenty: przyciski zaraz pod tytułem, a nie pod notatkami; ikona u góry wysokiego wiersza */
+.brief-row.doc-row {
+  align-items: start;
+}
+.brief-row .doc-actions {
+  margin-top: 10px;
+}
