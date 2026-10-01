@@ -38,7 +38,7 @@ export interface CaseType {
   hint: string
   sections: CaseSection[]
   /** zadania dodawane jako ukryte szkice, do dopracowania przed pokazaniem klientowi */
-  tasks?: Array<{ title: string; note: string; assignee: 'client' | 'nafu' }>
+  tasks?: Array<{ title: string; note: string; assignee: 'client' | 'nafu'; upload?: boolean }>
 }
 export const CASE_TYPES: CaseType[] = [
   { key: 'brand', label: 'Identyfikacja wizualna', hint: 'logo, kolory, typografia, księga znaku', sections: ['tasks', 'briefs', 'documents', 'media', 'chat', 'closing'] },
@@ -49,9 +49,9 @@ export const CASE_TYPES: CaseType[] = [
   {
     key: 'audit', label: 'Audyt', hint: 'sprawdzenie działań, dowody, raport', sections: ['tasks', 'briefs', 'documents', 'access', 'media', 'chat', 'closing'],
     tasks: [
-      { title: 'Umowa z wykonawcą i aneksy', note: 'Dodaj w sekcji Dokumenty tej sprawy skan albo zdjęcia umowy, razem z aneksami i ofertą sprzed podpisania.', assignee: 'client' },
-      { title: 'Faktury od wykonawcy z całego okresu współpracy', note: 'Dodaj w sekcji Dokumenty tej sprawy wszystkie faktury od początku współpracy.', assignee: 'client' },
-      { title: 'Raporty i wiadomości od wykonawcy', note: 'Dodaj w sekcji Dokumenty tej sprawy raporty, zestawienia i ważne wiadomości.', assignee: 'client' },
+      { title: 'Umowa z wykonawcą i aneksy', note: 'Kliknij „Wgraj” i dodaj skan albo zdjęcia umowy, razem z aneksami i ofertą sprzed podpisania.', assignee: 'client', upload: true },
+      { title: 'Faktury od wykonawcy z całego okresu współpracy', note: 'Kliknij „Wgraj” i dodaj wszystkie faktury od początku współpracy.', assignee: 'client', upload: true },
+      { title: 'Raporty i wiadomości od wykonawcy', note: 'Kliknij „Wgraj” i dodaj raporty, zestawienia i ważne wiadomości.', assignee: 'client', upload: true },
     ],
   },
   { key: 'social', label: 'Wsparcie SM w pojedynczej sprawie', hint: 'media społecznościowe, jedna konkretna potrzeba', sections: ['tasks', 'tips', 'access', 'media', 'chat', 'closing'] },

@@ -312,7 +312,7 @@ export default function Documents({
   )
 }
 
-function AddDoc({ onClose, onSave, asClient, kinds, initialKind }: { onClose: () => void; onSave: (title: string, file: File, requires: boolean, visible: boolean, note: string, kind?: string) => Promise<void>; asClient?: boolean; kinds?: Array<{ key: string; label: string }>; initialKind?: string }) {
+export function AddDoc({ onClose, onSave, asClient, kinds, initialKind }: { onClose: () => void; onSave: (title: string, file: File, requires: boolean, visible: boolean, note: string, kind?: string) => Promise<void>; asClient?: boolean; kinds?: Array<{ key: string; label: string }>; initialKind?: string }) {
   const toast = useToast()
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')

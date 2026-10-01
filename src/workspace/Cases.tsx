@@ -8,12 +8,12 @@ import {
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
   type Case, type CaseItems, type CaseMessage, type CasePriority, type CaseSection, type CaseTip,
 } from '../lib/cases'
-import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateDocument, updateTask, type ClientDocument, type Task } from '../lib/project'
+import { CLIENT_DOC_KINDS, addDocument, addTask, deleteTask, docKindLabel, listAccess, listDocuments, listTasks, saveOrder, toggleTask, updateDocument, updateTask, type ClientDocument, type Task } from '../lib/project'
 import type { Brief, Client } from '../lib/types'
 import { deleteFile, fmtSize, signedUrls, updateFile, type ClientFile } from '../lib/workspace'
 import Access from './Access'
 import { Empty, Field, Toggle } from './bits'
-import Documents, { DocReader } from './Documents'
+import Documents, { AddDoc, DocReader } from './Documents'
 
 const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 
@@ -85,7 +85,7 @@ export default function Cases({ client, isAdmin }: { client: Client; isAdmin: bo
             })
             // szablon rodzaju sprawy: zadania startowe jako ukryte szkice (tylko gdy sprawę zakłada administratorka)
             if (isAdmin && tpl?.tasks?.length) {
-              for (const [i, t] of tpl.tasks.entries()) await addTask({ client_id: client.id, case_id: c.id, title: t.title, note: t.note, assignee: t.assignee, visible: false, position: i })
+              for (const [i, t] of tpl.tasks.entries()) await addTask({ client_id: client.id, case_id: c.id, title: t.title, note: t.note, assignee: t.assignee, upload: t.upload ?? false, visible: false, position: i })
             }
             setCreating(false)
             await load()
@@ -183,6 +183,8 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   // przewodnik: przejście do sekcji i dokument otwarty z zadania
   const [jump, setJump] = useState<{ k: CaseSection; n: number } | null>(null)
   const [reader, setReader] = useState<{ doc: ClientDocument; task?: Task } | null>(null)
+  // klient wgrywa dokument prosto z zadania
+  const [uploading, setUploading] = useState<Task | null>(null)
   // opis sprawy edytowany w miejscu, w dużym polu (wprowadzenie do sprawy bywa długie)
   const [descDraft, setDescDraft] = useState<string | null>(null)
   const canEditCase = isAdmin || (c.created_by === 'client' && c.status === 'open')
@@ -214,7 +216,9 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
     if (u) window.open(u, '_blank', 'noopener')
   }
   const go = (k: CaseSection) => setJump({ k, n: Date.now() })
-  const guide = items ? buildGuide({ c, client, items, isAdmin, go, openDoc }) : []
+  // „Wgraj”: klient dostaje okno dodawania dokumentu, administratorka przechodzi do sekcji dokumentów
+  const upload = (t: Task) => (isAdmin ? go('documents') : setUploading(t))
+  const guide = items ? buildGuide({ c, client, items, isAdmin, go, openDoc, upload }) : []
 
   return (
     <div className="ws case">
@@ -317,7 +321,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
           {(c.sections ?? []).map((k) => {
             const el: Record<CaseSection, ReactNode> = {
               tasks: (
-                <TasksBlock client={client} c={c} tasks={items.tasks} documents={items.documents} onOpenDoc={openDoc} isAdmin={isAdmin} locked={locked} run={run} />
+                <TasksBlock client={client} c={c} tasks={items.tasks} documents={items.documents} briefs={items.briefs} onOpenDoc={openDoc} onUpload={upload} isAdmin={isAdmin} locked={locked} run={run} />
               ),
               tips: (
                 <TipsBlock c={c} isAdmin={isAdmin} locked={locked} />
@@ -393,6 +397,19 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
           }}
         />
       )}
+      {uploading && (
+        <AddDoc
+          asClient
+          kinds={CLIENT_DOC_KINDS.map((k) => ({ key: k, label: docKindLabel(k, { isAdmin: false, inCase: true }) }))}
+          initialKind="other"
+          onClose={() => setUploading(null)}
+          onSave={async (title, file, _requires, _visible, note, kind) => {
+            await addDocument(client.id, title, file, { requiresAcceptance: false, visible: true, note, caseId: c.id, kind })
+            setUploading(null)
+            await run(async () => {}, 'Dodano dokument. Gdy dodasz wszystko, odhacz zadanie.')
+          }}
+        />
+      )}
       {reader && (
         <DocReader
           doc={reader.doc}
@@ -436,22 +453,32 @@ const StepCtx = createContext<{ open: boolean; toggle: () => void } | null>(null
 type GuideStep = { key: string; label: string; hint?: string; done: boolean; action?: { label: string; onClick?: () => void; to?: string } }
 
 /** Lista rzeczy, które czekają na klienta w tej sprawie, w kolejności sekcji. Liczy się tylko to, co klient widzi. */
-function buildGuide({ c, client, items, isAdmin, go, openDoc }: { c: Case; client: Client; items: CaseItems; isAdmin: boolean; go: (k: CaseSection) => void; openDoc: (d: ClientDocument, t?: Task) => void }): GuideStep[] {
+function buildGuide({ c, client, items, isAdmin, go, openDoc, upload }: { c: Case; client: Client; items: CaseItems; isAdmin: boolean; go: (k: CaseSection) => void; openDoc: (d: ClientDocument, t?: Task) => void; upload: (t: Task) => void }): GuideStep[] {
   const steps: GuideStep[] = []
+  const clientTasks = items.tasks.filter((x) => x.assignee === 'client' && x.visible)
+  // ankieta podpięta do zadania nie pojawia się drugi raz jako osobny krok
+  const taskBriefs = new Set(clientTasks.map((t) => t.brief_id).filter(Boolean))
   for (const k of c.sections ?? []) {
     if (k === 'tasks') {
-      for (const t of items.tasks.filter((x) => x.assignee === 'client' && x.visible)) {
+      for (const t of clientTasks) {
         // administratorka widzi przycisk także przy szkicu dokumentu, z ostrzeżeniem, że klient go jeszcze nie zobaczy
         const doc = t.document_id ? items.documents.find((d) => d.id === t.document_id && (isAdmin || d.visible)) : undefined
         const draft = isAdmin && doc && !doc.visible
+        const brief = t.brief_id ? items.briefs.find((b) => b.id === t.brief_id && (isAdmin || b.status !== 'draft')) : undefined
         steps.push({
-          key: `t-${t.id}`, label: t.title, done: !!t.done_at,
+          key: `t-${t.id}`, label: t.title, done: !!t.done_at || brief?.status === 'submitted',
           hint: [t.due_date ? `do ${fmtDay(t.due_date)}` : '', draft ? 'dokument jest szkicem, klient nie zobaczy przycisku „Czytaj”, dopóki go nie udostępnisz' : ''].filter(Boolean).join(' · ') || undefined,
-          action: doc ? { label: doc.content ? 'Czytaj' : 'Otwórz', onClick: () => openDoc(doc, t) } : { label: 'Pokaż', onClick: () => go('tasks') },
+          action: doc
+            ? { label: doc.content ? 'Czytaj' : 'Otwórz', onClick: () => openDoc(doc, t) }
+            : brief
+              ? isAdmin ? { label: 'Odpowiedzi', to: `/panel/ankieta/${brief.id}` } : { label: brief.status === 'in_progress' ? 'Dokończ ankietę' : 'Wypełnij ankietę', to: `/${client.slug}/${brief.slug}` }
+              : t.upload
+                ? { label: 'Wgraj', onClick: () => upload(t) }
+                : { label: 'Pokaż', onClick: () => go('tasks') },
         })
       }
     } else if (k === 'briefs') {
-      for (const b of items.briefs.filter((x) => x.status !== 'draft')) {
+      for (const b of items.briefs.filter((x) => x.status !== 'draft' && !taskBriefs.has(x.id))) {
         steps.push({
           key: `b-${b.id}`, label: `Ankieta: ${b.title}`, done: b.status === 'submitted',
           action: isAdmin ? { label: 'Pokaż', onClick: () => go('briefs') } : { label: b.status === 'in_progress' ? 'Dokończ' : 'Wypełnij', to: `/${client.slug}/${b.slug}` },
@@ -598,7 +625,7 @@ function LinkExisting({ label, load, onPick }: { label: string; load: () => Prom
 
 /* ---------- zadania ---------- */
 
-function TasksBlock({ client, c, tasks, documents, onOpenDoc, isAdmin, locked, run }: { client: Client; c: Case; tasks: Task[]; documents: ClientDocument[]; onOpenDoc: (d: ClientDocument, t: Task) => void; isAdmin: boolean; locked: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
+function TasksBlock({ client, c, tasks, documents, briefs, onOpenDoc, onUpload, isAdmin, locked, run }: { client: Client; c: Case; tasks: Task[]; documents: ClientDocument[]; briefs: Brief[]; onOpenDoc: (d: ClientDocument, t: Task) => void; onUpload: (t: Task) => void; isAdmin: boolean; locked: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   if (!isAdmin && tasks.length === 0) return null
@@ -625,6 +652,7 @@ function TasksBlock({ client, c, tasks, documents, onOpenDoc, isAdmin, locked, r
         <TaskForm
           submitLabel="Dodaj"
           documents={documents}
+          briefs={briefs}
           onCancel={() => setAdding(false)}
           onSave={async (v) => {
             await run(() => addTask({ client_id: client.id, case_id: c.id, ...v, position: tasks.length }), 'Dodano zadanie')
@@ -633,13 +661,14 @@ function TasksBlock({ client, c, tasks, documents, onOpenDoc, isAdmin, locked, r
         />
       )}
 
-      {tasks.map((t) => {
+      {tasks.map((t, i) => {
         if (editing === t.id)
           return (
             <TaskForm
               key={t.id}
               initial={t}
               documents={documents}
+              briefs={briefs}
               submitLabel="Zapisz"
               onCancel={() => setEditing(null)}
               onSave={async (v) => {
@@ -651,14 +680,24 @@ function TasksBlock({ client, c, tasks, documents, onOpenDoc, isAdmin, locked, r
         const canTick = !locked && (isAdmin || t.assignee === 'client')
         // dokument do przeczytania: klient widzi przycisk tylko wtedy, gdy dokument jest dla niego widoczny
         const doc = t.document_id ? documents.find((d) => d.id === t.document_id) : undefined
+        // ankieta do wypełnienia: wysłana ankieta liczy się jak wykonane zadanie
+        const brief = t.brief_id ? briefs.find((b) => b.id === t.brief_id && (isAdmin || b.status !== 'draft')) : undefined
+        const isDone = !!t.done_at || brief?.status === 'submitted'
+        const move = (dir: -1 | 1) => {
+          const ids = tasks.map((x) => x.id)
+          const j = i + dir
+          if (j < 0 || j >= ids.length) return
+          ;[ids[i], ids[j]] = [ids[j], ids[i]]
+          run(() => saveOrder('client_tasks', ids))
+        }
         return (
-          <div key={t.id} className={`st-item task${t.done_at ? ' done' : ''}${!t.visible ? ' hidden-task' : ''}`}>
+          <div key={t.id} className={`st-item task${isDone ? ' done' : ''}${!t.visible ? ' hidden-task' : ''}`}>
             {canTick ? (
-              <button className={`todo-check${t.done_at ? ' on' : ''}`} aria-label={t.done_at ? 'Oznacz jako niezrobione' : 'Potwierdź wykonanie'} onClick={() => run(() => toggleTask(t, isAdmin))}>
-                {t.done_at ? '✓' : ''}
+              <button className={`todo-check${isDone ? ' on' : ''}`} aria-label={t.done_at ? 'Oznacz jako niezrobione' : 'Potwierdź wykonanie'} onClick={() => run(() => toggleTask(t, isAdmin))}>
+                {isDone ? '✓' : ''}
               </button>
             ) : (
-              <span className={`todo-auto${t.done_at ? ' ok' : ''}`}>{t.done_at ? '✓' : '•'}</span>
+              <span className={`todo-auto${isDone ? ' ok' : ''}`}>{isDone ? '✓' : '•'}</span>
             )}
             <span className="st-item-title">
               {t.title}
@@ -671,11 +710,36 @@ function TasksBlock({ client, c, tasks, documents, onOpenDoc, isAdmin, locked, r
               </button>
             )}
             {isAdmin && doc && !doc.visible && <span className="badge draft">Dokument jest szkicem</span>}
+            {t.upload && (isAdmin || !locked) && (
+              <button className={`btn btn-sm${isDone || isAdmin ? '' : ' btn-primary'}`} onClick={() => onUpload(t)}>
+                <Icon name="plus" size={14} /> Wgraj
+              </button>
+            )}
+            {brief &&
+              (isAdmin ? (
+                <Link className="btn btn-sm" to={`/panel/ankieta/${brief.id}${brief.status === 'draft' ? '/edycja' : ''}`}>
+                  <Icon name="eye" size={14} /> {brief.status === 'draft' ? 'Ankieta (szkic)' : 'Odpowiedzi'}
+                </Link>
+              ) : (
+                <Link className={`btn btn-sm${brief.status === 'submitted' ? '' : ' btn-primary'}`} to={`/${client.slug}/${brief.slug}`}>
+                  {brief.status === 'submitted' ? 'Zobacz odpowiedzi' : brief.status === 'in_progress' ? 'Dokończ ankietę' : 'Wypełnij ankietę'}
+                </Link>
+              ))}
             {isAdmin && !t.visible && <span className="badge draft">Ukryte przed klientem</span>}
             {t.due_date && <span className="muted" style={{ fontSize: 12.5 }}>do {fmtDay(t.due_date)}</span>}
             {t.done_at && <span className="muted" style={{ fontSize: 12.5 }}>potwierdzone {fmtDate(t.done_at)}</span>}
             {isAdmin && (
               <span className="st-item-tools">
+                {!locked && tasks.length > 1 && (
+                  <>
+                    <button className="btn btn-ghost btn-icon" aria-label="Przesuń zadanie wyżej" title="Wyżej" disabled={i === 0} onClick={() => move(-1)}>
+                      <Icon name="up" size={14} />
+                    </button>
+                    <button className="btn btn-ghost btn-icon" aria-label="Przesuń zadanie niżej" title="Niżej" disabled={i === tasks.length - 1} onClick={() => move(1)}>
+                      <Icon name="down" size={14} />
+                    </button>
+                  </>
+                )}
                 {!locked && (
                   <button className="btn btn-ghost btn-icon" aria-label="Edytuj zadanie" title="Edytuj" onClick={() => setEditing(t.id)}>
                     <Icon name="edit" size={14} />
@@ -699,29 +763,54 @@ function TasksBlock({ client, c, tasks, documents, onOpenDoc, isAdmin, locked, r
   )
 }
 
-type TaskValues = Pick<Task, 'title' | 'note' | 'due_date' | 'assignee' | 'visible' | 'document_id'>
+type TaskValues = Pick<Task, 'title' | 'note' | 'due_date' | 'assignee' | 'visible' | 'document_id' | 'upload' | 'brief_id'>
+type TaskAction = 'none' | 'read' | 'upload' | 'survey'
 
 /** Formularz zadania: dodawanie i edycja */
-function TaskForm({ initial, submitLabel, documents, onSave, onCancel }: { initial?: Task; submitLabel: string; documents: ClientDocument[]; onSave: (v: TaskValues) => Promise<void>; onCancel: () => void }) {
+function TaskForm({ initial, submitLabel, documents, briefs, onSave, onCancel }: { initial?: Task; submitLabel: string; documents: ClientDocument[]; briefs: Brief[]; onSave: (v: TaskValues) => Promise<void>; onCancel: () => void }) {
   const [title, setTitle] = useState(initial?.title ?? '')
   const [note, setNote] = useState(initial?.note ?? '')
   const [due, setDue] = useState(initial?.due_date ?? '')
   const [assignee, setAssignee] = useState<'client' | 'nafu'>(initial?.assignee ?? 'client')
   const [visible, setVisible] = useState(initial?.visible ?? true)
   const [docId, setDocId] = useState(initial?.document_id ?? '')
+  const [briefId, setBriefId] = useState(initial?.brief_id ?? '')
+  const [action, setAction] = useState<TaskAction>(initial?.document_id ? 'read' : initial?.brief_id ? 'survey' : initial?.upload ? 'upload' : 'none')
   const [busy, setBusy] = useState(false)
   return (
     <div className="case-form">
       <Field label="Zadanie" value={title} onChange={setTitle} placeholder="np. Sprawdzić personel w Rejestrze Sprawców i KRK" />
       <Field label="Opis (widzi klient, jeśli zadanie jest widoczne)" value={note} onChange={setNote} textarea />
-      {documents.length > 0 && (
+      <label className="field">
+        <span className="label">Przycisk przy zadaniu</span>
+        <select className="select" value={action} onChange={(e) => setAction(e.target.value as TaskAction)}>
+          <option value="none">bez przycisku, tylko odhaczenie</option>
+          <option value="read">Czytaj: dokument do przeczytania</option>
+          <option value="upload">Wgraj: klient dodaje dokument do sprawy</option>
+          <option value="survey">Wypełnij ankietę</option>
+        </select>
+      </label>
+      {action === 'read' && (
         <label className="field">
-          <span className="label">Dokument do przeczytania (przy zadaniu pojawi się przycisk „Czytaj”)</span>
+          <span className="label">Dokument do przeczytania</span>
           <select className="select" value={docId} onChange={(e) => setDocId(e.target.value)}>
-            <option value="">bez dokumentu</option>
+            <option value="">wybierz dokument</option>
             {documents.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.title}{d.visible ? '' : ' (szkic)'}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {action === 'survey' && (
+        <label className="field">
+          <span className="label">Ankieta do wypełnienia</span>
+          <select className="select" value={briefId} onChange={(e) => setBriefId(e.target.value)}>
+            <option value="">wybierz ankietę</option>
+            {briefs.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.title}{b.status === 'draft' ? ' (szkic)' : ''}
               </option>
             ))}
           </select>
@@ -748,7 +837,7 @@ function TaskForm({ initial, submitLabel, documents, onSave, onCancel }: { initi
           onClick={async () => {
             setBusy(true)
             try {
-              await onSave({ title: title.trim(), note: note.trim() || null, due_date: due || null, assignee, visible, document_id: docId || null })
+              await onSave({ title: title.trim(), note: note.trim() || null, due_date: due || null, assignee, visible, document_id: action === 'read' ? docId || null : null, brief_id: action === 'survey' ? briefId || null : null, upload: action === 'upload' })
             } finally {
               setBusy(false)
             }
