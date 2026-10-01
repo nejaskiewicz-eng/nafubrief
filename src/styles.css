@@ -4054,3 +4054,9 @@ body.is-sorting * {
   padding-top: 16px;
   padding-bottom: 16px;
 }
+
+.badge.important {
+  color: #93370d;
+  background: #fef4e6;
+  border-color: #f9d9a8;
+}

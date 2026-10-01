@@ -46,7 +46,7 @@ export default function Cases({ client, isAdmin }: { client: Client; isAdmin: bo
   const current = openId ? cases.find((c) => c.id === openId) : null
   if (current) return <CaseView key={current.id} client={client} c={current} isAdmin={isAdmin} onBack={() => open(null)} onChanged={load} />
 
-  const rank: Record<CasePriority, number> = { very_urgent: 0, urgent: 1, normal: 2 }
+  const rank: Record<CasePriority, number> = { very_urgent: 0, urgent: 1, important: 2, normal: 3 }
   const active = cases.filter((c) => c.status !== 'closed').sort((a, b) => rank[a.priority] - rank[b.priority])
   const closed = cases.filter((c) => c.status === 'closed')
 
@@ -101,7 +101,7 @@ function CaseList({ title, list, unread, isAdmin, onOpen }: { title: string; lis
             <h3>{c.title}</h3>
             <div className="meta">
               <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
-              {c.priority !== 'normal' && c.status !== 'closed' && <span className="badge urgent">{PRIORITY_LABEL[c.priority]}</span>}
+              {c.priority !== 'normal' && c.status !== 'closed' && <span className={`badge ${c.priority === 'important' ? 'important' : 'urgent'}`}>{PRIORITY_LABEL[c.priority]}</span>}
               {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
               {c.due_date && c.status !== 'closed' && <span>termin {fmtDay(c.due_date)}</span>}
               <span>zmiana {fmtDate(c.updated_at)}</span>
@@ -233,7 +233,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
       <section className="card case-head">
         <div className="meta">
           <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
-          {c.priority !== 'normal' && <span className="badge urgent">{PRIORITY_LABEL[c.priority]}</span>}
+          {c.priority !== 'normal' && <span className={`badge ${c.priority === 'important' ? 'important' : 'urgent'}`}>{PRIORITY_LABEL[c.priority]}</span>}
           {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
           {c.due_date && <span>termin {fmtDay(c.due_date)}</span>}
           <span>założona {fmtDate(c.created_at)}</span>

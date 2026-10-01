@@ -16,7 +16,7 @@ function must<T>(res: { data: T | null; error: { message: string } | null }): T 
 }
 
 export type CaseStatus = 'open' | 'review' | 'accepted' | 'closed'
-export type CasePriority = 'normal' | 'urgent' | 'very_urgent'
+export type CasePriority = 'normal' | 'important' | 'urgent' | 'very_urgent'
 /** Sekcje, które można włączyć w sprawie (kolejność = kolejność w widoku sprawy) */
 export type CaseSection = 'tasks' | 'tips' | 'briefs' | 'contracts' | 'documents' | 'access' | 'media' | 'chat' | 'closing'
 export const SECTIONS: Array<{ key: CaseSection; label: string; hint: string }> = [
@@ -30,7 +30,7 @@ export const SECTIONS: Array<{ key: CaseSection; label: string; hint: string }> 
   { key: 'chat', label: 'Rozmowa', hint: 'wiadomości tylko w tej sprawie' },
   { key: 'closing', label: 'Akceptacja i zamknięcie', hint: 'prośba o akceptację, podsumowanie, zamknięcie' },
 ]
-export const PRIORITY_LABEL: Record<CasePriority, string> = { normal: 'Zwykła', urgent: 'Pilne', very_urgent: 'Bardzo pilne' }
+export const PRIORITY_LABEL: Record<CasePriority, string> = { normal: 'Zwykła', important: 'Ważne', urgent: 'Pilne', very_urgent: 'Bardzo pilne' }
 export interface Case {
   id: string
   client_id: string
