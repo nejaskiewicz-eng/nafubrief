@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import {
-  CASE_BADGE, CASE_STATUS, acceptCase, addCaseBrief, caseUnread, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
+  CASE_BADGE, CASE_STATUS, acceptCase, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
   type Case, type CaseItems, type CaseMessage,
 } from '../lib/cases'
@@ -161,6 +161,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   const toast = useToast()
   const [items, setItems] = useState<CaseItems | null>(null)
   const [editing, setEditing] = useState(false)
+  const [inviting, setInviting] = useState(false)
   const canEditCase = isAdmin || (c.created_by === 'client' && c.status === 'open')
   const locked = c.status === 'closed'
 
@@ -209,6 +210,20 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         </div>
       </div>
 
+      {isAdmin && !locked && (
+        <div className="case-invite">
+          <div>
+            <strong>Powiadom klienta o tej sprawie</strong>
+            <span className="muted">
+              {c.invited_at ? ` Ostatnie powiadomienie: ${fmtDate(c.invited_at)}.` : ' E-mail z prośbą o dołączenie i linkiem prosto do sprawy.'}
+            </span>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setInviting(true)}>
+            <Icon name="mail" size={15} /> {c.invited_at ? 'Wyślij ponownie' : 'Wyślij powiadomienie e-mail'}
+          </button>
+        </div>
+      )}
+
       <section className="card case-head">
         <div className="meta">
           <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
@@ -256,6 +271,18 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         </>
       )}
 
+      {inviting && (
+        <InviteCase
+          c={c}
+          client={client}
+          onClose={() => setInviting(false)}
+          onSend={async (note) => {
+            const to = await inviteToCase(c.id, note)
+            setInviting(false)
+            await run(async () => {}, `Wysłano powiadomienie na ${to}`)
+          }}
+        />
+      )}
       {editing && (
         <EditCase
           c={c}
@@ -757,6 +784,51 @@ function Closing({ c, isAdmin, run }: { c: Case; isAdmin: boolean; run: (fn: () 
         </>
       )}
     </section>
+  )
+}
+
+function InviteCase({ c, client, onClose, onSend }: { c: Case; client: Client; onClose: () => void; onSend: (note: string) => Promise<void> }) {
+  const toast = useToast()
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const to = client.login_email || client.email
+  return (
+    <Modal label="Powiadomienie o sprawie" onClose={onClose}>
+      <div className="eyebrow">Sprawy bieżące</div>
+      <h2 style={{ marginTop: 8, marginBottom: 14 }}>Prośba o dołączenie do sprawy</h2>
+      <div className="stack">
+        <p style={{ margin: 0 }}>
+          Do: <strong>{to || 'brak adresu e-mail klienta'}</strong>
+          <br />
+          Temat: <strong>Sprawa do Twojego udziału: {c.title}</strong>
+        </p>
+        <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+          W e-mailu będzie temat, opis{c.due_date ? ', termin' : ''} i przycisk „Otwórz sprawę” prowadzący prosto do niej w strefie klienta.
+          {!client.user_id && ' Klient nie ma jeszcze konta w panelu: najpierw załóż je w zakładce Ankiety i dostęp.'}
+        </p>
+        <Field label="Dodatkowa wiadomość (opcjonalnie)" value={note} onChange={setNote} textarea placeholder="np. Proszę o akceptację dokumentów do piątku." />
+      </div>
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Anuluj
+        </button>
+        <button
+          className="btn btn-primary"
+          disabled={busy || !to}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await onSend(note.trim())
+            } catch (e) {
+              toast((e as Error).message)
+              setBusy(false)
+            }
+          }}
+        >
+          {busy ? 'Wysyłam…' : 'Wyślij'}
+        </button>
+      </div>
+    </Modal>
   )
 }
 

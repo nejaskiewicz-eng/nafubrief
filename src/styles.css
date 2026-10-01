@@ -3802,3 +3802,15 @@ button.case-row:hover {
   text-decoration: underline;
   cursor: pointer;
 }
+.case-invite {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: var(--teal-50);
+  border: 1px solid var(--teal-100);
+  font-size: 14.5px;
+}

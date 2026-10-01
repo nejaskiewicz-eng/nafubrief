@@ -28,6 +28,8 @@ export interface Case {
   summary: string | null
   accepted_at: string | null
   closed_at: string | null
+  /** ostatnie powiadomienie e-mail z prośbą o dołączenie do sprawy */
+  invited_at: string | null
   created_at: string
   updated_at: string
 }
@@ -150,4 +152,17 @@ export async function caseUnread(clientId: string, iAmAdmin: boolean): Promise<R
   const out: Record<string, number> = {}
   ;(data ?? []).forEach((r: { case_id: string }) => (out[r.case_id] = (out[r.case_id] ?? 0) + 1))
   return out
+}
+
+/** E-mail do klienta z prośbą o dołączenie do sprawy (funkcja Netlify, wysyłka przez Resend) */
+export async function inviteToCase(caseId: string, note: string): Promise<string> {
+  const { data } = await sb().auth.getSession()
+  const res = await fetch('/.netlify/functions/case-invite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+    body: JSON.stringify({ caseId, note }),
+  })
+  const out = (await res.json().catch(() => ({}))) as { error?: string; to?: string }
+  if (!res.ok) throw new Error(out.error ?? `Błąd ${res.status}`)
+  return out.to ?? ''
 }

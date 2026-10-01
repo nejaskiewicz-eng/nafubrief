@@ -147,7 +147,8 @@ export function ClientChrome({ children, email, client }: { children: ReactNode;
 export function ClientTab({ tab }: { tab: 'sprawy' | 'podglad' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'dostepy' | 'dokumenty' | 'wiadomosci' }) {
   const { client = '' } = useParams()
   const { session, mine } = useClientCtx()
-  if (!session || !mine) return <Navigate to={`/logowanie?next=${encodeURIComponent(`/${client}/${tab}`)}`} replace />
+  const loc = useLocation()
+  if (!session || !mine) return <Navigate to={`/logowanie?next=${encodeURIComponent(`/${client}/${tab}${loc.search}`)}`} replace />
   return (
     <ClientChrome email={session.email} client={mine}>
       {tab === 'sprawy' && <Cases client={mine} isAdmin={false} />}
