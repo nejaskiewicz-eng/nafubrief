@@ -370,7 +370,7 @@ function AddDoc({ onClose, onSave, asClient, kinds, initialKind }: { onClose: ()
   )
 }
 
-function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDocument; isAdmin: boolean; onClose: () => void; onSaved: (c: string, title: string) => Promise<void>; onAccept?: () => void }) {
+export function DocReader({ doc, isAdmin, onClose, onSaved, onAccept, onRead }: { doc: ClientDocument; isAdmin: boolean; onClose: () => void; onSaved: (c: string, title: string) => Promise<void>; onAccept?: () => void; /** zadanie „przeczytaj”: potwierdzenie lektury odhacza zadanie */ onRead?: () => void }) {
   const [edit, setEdit] = useState(false)
   const [text, setText] = useState(doc.content ?? '')
   const [title, setTitle] = useState(doc.title)
@@ -393,6 +393,11 @@ function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDo
         {onAccept && (
           <button className="btn btn-sm btn-primary" onClick={onAccept}>
             ✓ Akceptuję
+          </button>
+        )}
+        {onRead && (
+          <button className="btn btn-sm btn-primary" onClick={onRead}>
+            ✓ Przeczytane
           </button>
         )}
         <button className="btn btn-sm" onClick={onClose}>

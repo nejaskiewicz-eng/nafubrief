@@ -174,12 +174,12 @@ export async function caseUnread(clientId: string, iAmAdmin: boolean): Promise<R
 }
 
 /** E-mail do klienta z prośbą o dołączenie do sprawy (funkcja Netlify, wysyłka przez Resend) */
-export async function inviteToCase(caseId: string, note: string, test = false): Promise<string> {
+export async function inviteToCase(caseId: string, note: string, test = false, reminder = false): Promise<string> {
   const { data } = await sb().auth.getSession()
   const res = await fetch('/.netlify/functions/case-invite', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
-    body: JSON.stringify({ caseId, note, test }),
+    body: JSON.stringify({ caseId, note, test, reminder }),
   })
   const out = (await res.json().catch(() => ({}))) as { error?: string; to?: string }
   if (!res.ok) throw new Error(out.error ?? `Błąd ${res.status}`)

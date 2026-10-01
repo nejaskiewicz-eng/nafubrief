@@ -39,6 +39,7 @@ const router = createBrowserRouter([
   {
     path: '/panel',
     element: S(<AdminLayout />),
+    errorElement: <Notice title="Coś poszło nie tak" text="Odśwież stronę. Jeśli błąd wróci, daj mi znać." />,
     children: [
       { index: true, element: S(<Dashboard />) },
       { path: 'klient/:id', element: S(<ClientDetail />) },
@@ -51,6 +52,7 @@ const router = createBrowserRouter([
   {
     path: '/:client',
     element: <ClientArea />,
+    errorElement: <Notice title="Coś poszło nie tak" text="Odśwież stronę. Jeśli błąd wróci, napisz do mnie." />,
     children: [
       { index: true, element: <Portal /> },
       { path: 'sprawy', element: <ClientTab tab="sprawy" /> },

@@ -36,11 +36,13 @@ export const handler: Handler = async (event) => {
   let caseId = ''
   let note = ''
   let test = false
+  let reminder = false
   try {
-    const b = JSON.parse(event.body || '{}') as { caseId?: string; note?: string; test?: boolean }
+    const b = JSON.parse(event.body || '{}') as { caseId?: string; note?: string; test?: boolean; reminder?: boolean }
     caseId = b.caseId || ''
     note = (b.note || '').trim().slice(0, 2000)
     test = b.test === true
+    reminder = b.reminder === true
   } catch {
     return json(400, { error: 'Nieprawidłowe dane.' })
   }
@@ -60,7 +62,7 @@ export const handler: Handler = async (event) => {
   const site = (process.env.VITE_SITE_URL || process.env.URL || '').replace(/\/$/, '')
   const link = `${site}/${cl.slug}/sprawy?sprawa=${c.id}`
   const { subject, html, text } = renderCaseInvite({
-    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: lead(c.description), due: c.due_date, note, login: clientTo, link, site,
+    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: reminder ? null : lead(c.description), due: c.due_date, note, login: clientTo, link, site, reminder,
   })
 
   const res = await fetch('https://api.resend.com/emails', {
@@ -89,6 +91,8 @@ export function renderCaseInvite(p: {
   login: string
   link: string
   site?: string
+  /** przypomnienie o sprawie, którą klient już zna (inny temat i wstęp, bez opisu) */
+  reminder?: boolean
 }) {
   const ty = p.form === 'ty'
   const pron = p.form === 'pani' ? 'Pani' : p.form === 'pan' ? 'Pana' : 'Państwa'
@@ -97,11 +101,17 @@ export function renderCaseInvite(p: {
   const site = (p.site || 'https://nafu-design.com').replace(/\/$/, '')
   const cat = p.priority === 'very_urgent' ? 'Bardzo pilne' : p.priority === 'urgent' ? 'Pilne' : ''
 
-  const subject = ty ? `${sal ? `${sal}, n` : 'N'}owa sprawa w panelu: ${p.title}` : `Sprawa wymagająca ${pron} udziału: ${p.title}`
+  const subject = p.reminder
+    ? ty ? `${sal ? `${sal}, p` : 'P'}rzypomnienie o sprawie: ${p.title}` : `Przypomnienie o sprawie: ${p.title}`
+    : ty ? `${sal ? `${sal}, n` : 'N'}owa sprawa w panelu: ${p.title}` : `Sprawa wymagająca ${pron} udziału: ${p.title}`
   const greet = ty ? (sal ? `Cześć ${esc(sal)}!` : 'Cześć!') : `Dzień dobry${sal ? ` ${esc(sal)}` : ''},`
-  const intro = ty
-    ? `W Twojej strefie klienta NAFU dodałam nową sprawę${cat ? ', z kategorii:' : '.'}`
-    : `w strefie klienta NAFU Design dodałam nową sprawę, w której potrzebuję ${pron} udziału${cat ? '. Kategoria:' : '.'}`
+  const intro = p.reminder
+    ? ty
+      ? `Przypominam o sprawie w Twojej strefie klienta NAFU${cat ? ', z kategorii:' : '.'}`
+      : `przypominam o sprawie w strefie klienta NAFU Design, w której potrzebuję ${pron} udziału${cat ? '. Kategoria:' : '.'}`
+    : ty
+      ? `W Twojej strefie klienta NAFU dodałam nową sprawę${cat ? ', z kategorii:' : '.'}`
+      : `w strefie klienta NAFU Design dodałam nową sprawę, w której potrzebuję ${pron} udziału${cat ? '. Kategoria:' : '.'}`
   const cta = ty ? 'Otwórz sprawę' : 'Otwórz sprawę w panelu'
   const outro = ty
     ? `W środku masz wszystko w jednym miejscu: zadania, pytania, dokumenty i naszą rozmowę. Logujesz się adresem ${esc(p.login)}.`

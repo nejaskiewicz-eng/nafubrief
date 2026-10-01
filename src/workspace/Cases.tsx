@@ -8,12 +8,12 @@ import {
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
   type Case, type CaseItems, type CaseMessage, type CasePriority, type CaseSection, type CaseTip,
 } from '../lib/cases'
-import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateDocument, updateTask, type Task } from '../lib/project'
+import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateDocument, updateTask, type ClientDocument, type Task } from '../lib/project'
 import type { Brief, Client } from '../lib/types'
 import { deleteFile, fmtSize, signedUrls, updateFile, type ClientFile } from '../lib/workspace'
 import Access from './Access'
 import { Empty, Field, Toggle } from './bits'
-import Documents from './Documents'
+import Documents, { DocReader } from './Documents'
 
 const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 
@@ -166,7 +166,10 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   const toast = useToast()
   const [items, setItems] = useState<CaseItems | null>(null)
   const [editing, setEditing] = useState(false)
-  const [inviting, setInviting] = useState(false)
+  const [inviting, setInviting] = useState<{ note: string; reminder: boolean } | null>(null)
+  // przewodnik: przejście do sekcji i dokument otwarty z zadania
+  const [jump, setJump] = useState<{ k: CaseSection; n: number } | null>(null)
+  const [reader, setReader] = useState<{ doc: ClientDocument; task?: Task } | null>(null)
   // opis sprawy edytowany w miejscu, w dużym polu (wprowadzenie do sprawy bywa długie)
   const [descDraft, setDescDraft] = useState<string | null>(null)
   const canEditCase = isAdmin || (c.created_by === 'client' && c.status === 'open')
@@ -188,6 +191,17 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
     }
     await Promise.all([loadItems(), onChanged()])
   }
+
+  // dokument otwierany prosto z zadania albo z przewodnika
+  const openDoc = async (doc: ClientDocument, task?: Task) => {
+    if (doc.content) return setReader({ doc, task })
+    const p = doc.file?.path
+    if (!p) return
+    const u = (await signedUrls([p]))[p]
+    if (u) window.open(u, '_blank', 'noopener')
+  }
+  const go = (k: CaseSection) => setJump({ k, n: Date.now() })
+  const guide = items ? buildGuide({ c, client, items, isAdmin, go, openDoc }) : []
 
   return (
     <div className="ws case">
@@ -227,7 +241,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
               {c.invited_at ? ` Ostatnie powiadomienie: ${fmtDate(c.invited_at)}.` : ' E-mail z prośbą o dołączenie i linkiem prosto do sprawy.'}
             </span>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setInviting(true)}>
+          <button className="btn btn-primary btn-sm" onClick={() => setInviting({ note: '', reminder: false })}>
             <Icon name="mail" size={15} /> {c.invited_at ? 'Wyślij ponownie' : 'Wyślij powiadomienie e-mail'}
           </button>
         </div>
@@ -278,10 +292,18 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         <Spinner />
       ) : (
         <>
+          {!locked && (
+            <Guide
+              steps={guide}
+              isAdmin={isAdmin}
+              hidden={isAdmin ? items.tasks.filter((t) => t.assignee === 'client' && !t.visible).length + items.briefs.filter((b) => b.status === 'draft').length + items.documents.filter((d) => !d.visible).length : 0}
+              onRemind={isAdmin && guide.some((s) => !s.done) ? () => setInviting({ reminder: true, note: `Do zrobienia w tej sprawie:\n${guide.filter((s) => !s.done).slice(0, 8).map((s) => `- ${s.label}`).join('\n')}` }) : undefined}
+            />
+          )}
           {(c.sections ?? []).map((k) => {
             const el: Record<CaseSection, ReactNode> = {
               tasks: (
-                <TasksBlock client={client} c={c} tasks={items.tasks} isAdmin={isAdmin} locked={locked} run={run} />
+                <TasksBlock client={client} c={c} tasks={items.tasks} documents={items.documents} onOpenDoc={openDoc} isAdmin={isAdmin} locked={locked} run={run} />
               ),
               tips: (
                 <TipsBlock c={c} isAdmin={isAdmin} locked={locked} />
@@ -338,7 +360,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
                 <Closing c={c} isAdmin={isAdmin} run={run} />
               ),
             }
-            return <CaseStep key={`${c.id}-${k}`}>{el[k]}</CaseStep>
+            return <CaseStep key={`${c.id}-${k}`} k={k} jump={jump}>{el[k]}</CaseStep>
           })}
         </>
       )}
@@ -347,12 +369,34 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         <InviteCase
           c={c}
           client={client}
-          onClose={() => setInviting(false)}
+          initialNote={inviting.note}
+          reminder={inviting.reminder}
+          onClose={() => setInviting(null)}
           onSend={async (note, test) => {
-            const to = await inviteToCase(c.id, note, test)
-            if (!test) setInviting(false)
-            await run(async () => {}, test ? `Wysłano test na ${to}` : `Wysłano powiadomienie na ${to}`)
+            const to = await inviteToCase(c.id, note, test, inviting.reminder)
+            if (!test) setInviting(null)
+            await run(async () => {}, test ? `Wysłano test na ${to}` : inviting.reminder ? `Wysłano przypomnienie na ${to}` : `Wysłano powiadomienie na ${to}`)
           }}
+        />
+      )}
+      {reader && (
+        <DocReader
+          doc={reader.doc}
+          isAdmin={isAdmin}
+          onClose={() => setReader(null)}
+          onSaved={async (content, title) => {
+            await run(() => updateDocument(reader.doc.id, { content, title }), 'Zapisano zmiany')
+            setReader({ ...reader, doc: { ...reader.doc, content, title } })
+          }}
+          onRead={
+            !isAdmin && !locked && reader.task && !reader.task.done_at && reader.task.assignee === 'client'
+              ? async () => {
+                  const t = reader.task!
+                  setReader(null)
+                  await run(() => toggleTask(t, false), 'Zadanie odhaczone')
+                }
+              : undefined
+          }
         />
       )}
       {editing && (
@@ -373,10 +417,114 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
 /** Sekcja sprawy jako krok: startuje zwinięta, numer kroku liczy CSS (tylko sekcje faktycznie pokazane) */
 const StepCtx = createContext<{ open: boolean; toggle: () => void } | null>(null)
 
-function CaseStep({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
+/* ---------- przewodnik: co teraz ---------- */
+
+type GuideStep = { key: string; label: string; hint?: string; done: boolean; action?: { label: string; onClick?: () => void; to?: string } }
+
+/** Lista rzeczy, które czekają na klienta w tej sprawie, w kolejności sekcji. Liczy się tylko to, co klient widzi. */
+function buildGuide({ c, client, items, isAdmin, go, openDoc }: { c: Case; client: Client; items: CaseItems; isAdmin: boolean; go: (k: CaseSection) => void; openDoc: (d: ClientDocument, t?: Task) => void }): GuideStep[] {
+  const steps: GuideStep[] = []
+  for (const k of c.sections ?? []) {
+    if (k === 'tasks') {
+      for (const t of items.tasks.filter((x) => x.assignee === 'client' && x.visible)) {
+        const doc = t.document_id ? items.documents.find((d) => d.id === t.document_id && d.visible) : undefined
+        steps.push({
+          key: `t-${t.id}`, label: t.title, hint: t.due_date ? `do ${fmtDay(t.due_date)}` : undefined, done: !!t.done_at,
+          action: doc ? { label: doc.content ? 'Czytaj' : 'Otwórz', onClick: () => openDoc(doc, t) } : { label: 'Pokaż', onClick: () => go('tasks') },
+        })
+      }
+    } else if (k === 'briefs') {
+      for (const b of items.briefs.filter((x) => x.status !== 'draft')) {
+        steps.push({
+          key: `b-${b.id}`, label: `Ankieta: ${b.title}`, done: b.status === 'submitted',
+          action: isAdmin ? { label: 'Pokaż', onClick: () => go('briefs') } : { label: b.status === 'in_progress' ? 'Dokończ' : 'Wypełnij', to: `/${client.slug}/${b.slug}` },
+        })
+      }
+    } else if (k === 'contracts' || k === 'documents') {
+      const list = items.documents.filter((d) => d.visible && d.requires_acceptance && d.from_admin !== false && (k === 'contracts' ? d.kind === 'contract' : d.kind !== 'contract'))
+      for (const d of list) {
+        steps.push({
+          key: `d-${d.id}`, label: `${k === 'contracts' ? 'Umowa do akceptacji' : 'Dokument do akceptacji'}: ${d.title}`, done: !!d.accepted_at,
+          action: { label: 'Pokaż', onClick: () => go(k) },
+        })
+      }
+    } else if (k === 'access') {
+      const list = items.access.filter((a) => a.status !== 'na')
+      const todo = list.filter((a) => a.status === 'todo').length
+      if (list.length) steps.push({ key: 'access', label: `Dostępy: przekazane ${list.length - todo} z ${list.length}`, done: todo === 0, action: { label: 'Pokaż', onClick: () => go('access') } })
+    }
+  }
+  return steps
+}
+
+function GuideAction({ a, primary }: { a: NonNullable<GuideStep['action']>; primary?: boolean }) {
+  const cls = `btn btn-sm${primary ? ' btn-primary' : ''}`
+  return a.to ? (
+    <Link className={cls} to={a.to}>
+      {a.label}
+    </Link>
+  ) : (
+    <button className={cls} onClick={a.onClick}>
+      {a.label}
+    </button>
+  )
+}
+
+function Guide({ steps, isAdmin, hidden, onRemind }: { steps: GuideStep[]; isAdmin: boolean; hidden: number; onRemind?: () => void }) {
+  if (steps.length === 0 && !(isAdmin && hidden > 0)) return null
+  const done = steps.filter((s) => s.done).length
+  const next = steps.find((s) => !s.done)
   return (
-    <div className={`case-step${open ? ' open' : ''}`}>
+    <section className="card case-guide">
+      <div className="case-guide-head">
+        <div style={{ minWidth: 0 }}>
+          <div className="eyebrow">{isAdmin ? 'Co czeka na klienta' : 'Co teraz'}</div>
+          <h3>{steps.length === 0 ? 'Klient nie ma jeszcze nic do zrobienia' : next ? next.label : isAdmin ? 'Klient ma wszystko zrobione' : 'Wszystko zrobione. Dziękuję!'}</h3>
+          {next?.hint && <p className="muted">{next.hint}</p>}
+        </div>
+        {!isAdmin && next?.action && <GuideAction a={next.action} primary />}
+        {onRemind && (
+          <button className="btn btn-sm" onClick={onRemind}>
+            <Icon name="mail" size={15} /> Przypomnij e-mailem
+          </button>
+        )}
+      </div>
+      {steps.length > 0 && (
+        <>
+          <div className="case-guide-bar" role="progressbar" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={done}>
+            <span style={{ width: `${Math.round((done / steps.length) * 100)}%` }} />
+          </div>
+          <ol className="case-guide-list">
+            {steps.map((s) => (
+              <li key={s.key} className={s.done ? 'done' : s === next ? 'next' : ''}>
+                <span className="case-guide-dot">{s.done ? '✓' : ''}</span>
+                <span className="case-guide-label">
+                  {s.label}
+                  {s.hint && !s.done && <span className="muted"> · {s.hint}</span>}
+                </span>
+                {!s.done && s.action && s !== next && <GuideAction a={s.action} />}
+              </li>
+            ))}
+          </ol>
+          <p className="muted case-guide-sum">Zrobione: {done} z {steps.length}</p>
+        </>
+      )}
+      {isAdmin && hidden > 0 && <p className="muted case-guide-sum">Ukryte przed klientem: {hidden}. Szkice i ukryte zadania nie pojawiają się u klienta, dopóki ich nie pokażesz.</p>}
+    </section>
+  )
+}
+
+function CaseStep({ k, jump, children }: { k: CaseSection; jump: { k: CaseSection; n: number } | null; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  // przejście z przewodnika: rozwiń sekcję i przewiń do niej
+  useEffect(() => {
+    if (jump?.k !== k) return
+    setOpen(true)
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [jump, k])
+  return (
+    <div ref={ref} className={`case-step${open ? ' open' : ''}`}>
       <StepCtx.Provider value={{ open, toggle: () => setOpen((o) => !o) }}>{children}</StepCtx.Provider>
     </div>
   )
@@ -433,7 +581,7 @@ function LinkExisting({ label, load, onPick }: { label: string; load: () => Prom
 
 /* ---------- zadania ---------- */
 
-function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client; c: Case; tasks: Task[]; isAdmin: boolean; locked: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
+function TasksBlock({ client, c, tasks, documents, onOpenDoc, isAdmin, locked, run }: { client: Client; c: Case; tasks: Task[]; documents: ClientDocument[]; onOpenDoc: (d: ClientDocument, t: Task) => void; isAdmin: boolean; locked: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   if (!isAdmin && tasks.length === 0) return null
@@ -459,6 +607,7 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
       {adding && (
         <TaskForm
           submitLabel="Dodaj"
+          documents={documents}
           onCancel={() => setAdding(false)}
           onSave={async (v) => {
             await run(() => addTask({ client_id: client.id, case_id: c.id, ...v, position: tasks.length }), 'Dodano zadanie')
@@ -473,6 +622,7 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
             <TaskForm
               key={t.id}
               initial={t}
+              documents={documents}
               submitLabel="Zapisz"
               onCancel={() => setEditing(null)}
               onSave={async (v) => {
@@ -482,6 +632,8 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
             />
           )
         const canTick = !locked && (isAdmin || t.assignee === 'client')
+        // dokument do przeczytania: klient widzi przycisk tylko wtedy, gdy dokument jest dla niego widoczny
+        const doc = t.document_id ? documents.find((d) => d.id === t.document_id) : undefined
         return (
           <div key={t.id} className={`st-item task${t.done_at ? ' done' : ''}${!t.visible ? ' hidden-task' : ''}`}>
             {canTick ? (
@@ -496,6 +648,12 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
               {t.note && <span className="muted st-item-note">{t.note}</span>}
             </span>
             <span className={`badge ${t.assignee === 'client' ? 'sent' : 'draft'}`}>{t.assignee === 'client' ? (isAdmin ? 'Klient' : 'Twoje zadanie') : isAdmin ? 'Ja' : 'Po stronie NAFU Design'}</span>
+            {doc && (isAdmin || doc.visible) && (
+              <button className={`btn btn-sm${t.done_at || isAdmin ? '' : ' btn-primary'}`} onClick={() => onOpenDoc(doc, t)}>
+                <Icon name="eye" size={14} /> {doc.content ? 'Czytaj' : 'Otwórz'}
+              </button>
+            )}
+            {isAdmin && doc && !doc.visible && <span className="badge draft">Dokument jest szkicem</span>}
             {isAdmin && !t.visible && <span className="badge draft">Ukryte przed klientem</span>}
             {t.due_date && <span className="muted" style={{ fontSize: 12.5 }}>do {fmtDay(t.due_date)}</span>}
             {t.done_at && <span className="muted" style={{ fontSize: 12.5 }}>potwierdzone {fmtDate(t.done_at)}</span>}
@@ -524,20 +682,34 @@ function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client
   )
 }
 
-type TaskValues = Pick<Task, 'title' | 'note' | 'due_date' | 'assignee' | 'visible'>
+type TaskValues = Pick<Task, 'title' | 'note' | 'due_date' | 'assignee' | 'visible' | 'document_id'>
 
 /** Formularz zadania: dodawanie i edycja */
-function TaskForm({ initial, submitLabel, onSave, onCancel }: { initial?: Task; submitLabel: string; onSave: (v: TaskValues) => Promise<void>; onCancel: () => void }) {
+function TaskForm({ initial, submitLabel, documents, onSave, onCancel }: { initial?: Task; submitLabel: string; documents: ClientDocument[]; onSave: (v: TaskValues) => Promise<void>; onCancel: () => void }) {
   const [title, setTitle] = useState(initial?.title ?? '')
   const [note, setNote] = useState(initial?.note ?? '')
   const [due, setDue] = useState(initial?.due_date ?? '')
   const [assignee, setAssignee] = useState<'client' | 'nafu'>(initial?.assignee ?? 'client')
   const [visible, setVisible] = useState(initial?.visible ?? true)
+  const [docId, setDocId] = useState(initial?.document_id ?? '')
   const [busy, setBusy] = useState(false)
   return (
     <div className="case-form">
       <Field label="Zadanie" value={title} onChange={setTitle} placeholder="np. Sprawdzić personel w Rejestrze Sprawców i KRK" />
       <Field label="Opis (widzi klient, jeśli zadanie jest widoczne)" value={note} onChange={setNote} textarea />
+      {documents.length > 0 && (
+        <label className="field">
+          <span className="label">Dokument do przeczytania (przy zadaniu pojawi się przycisk „Czytaj”)</span>
+          <select className="select" value={docId} onChange={(e) => setDocId(e.target.value)}>
+            <option value="">bez dokumentu</option>
+            {documents.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.title}{d.visible ? '' : ' (szkic)'}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="row">
         <div className="seg" role="radiogroup" aria-label="Kto wykonuje">
           <button className={assignee === 'client' ? 'on' : ''} onClick={() => setAssignee('client')}>
@@ -559,7 +731,7 @@ function TaskForm({ initial, submitLabel, onSave, onCancel }: { initial?: Task; 
           onClick={async () => {
             setBusy(true)
             try {
-              await onSave({ title: title.trim(), note: note.trim() || null, due_date: due || null, assignee, visible })
+              await onSave({ title: title.trim(), note: note.trim() || null, due_date: due || null, assignee, visible, document_id: docId || null })
             } finally {
               setBusy(false)
             }
@@ -915,23 +1087,23 @@ function Closing({ c, isAdmin, run }: { c: Case; isAdmin: boolean; run: (fn: () 
   )
 }
 
-function InviteCase({ c, client, onClose, onSend }: { c: Case; client: Client; onClose: () => void; onSend: (note: string, test: boolean) => Promise<void> }) {
+function InviteCase({ c, client, initialNote, reminder, onClose, onSend }: { c: Case; client: Client; initialNote?: string; reminder?: boolean; onClose: () => void; onSend: (note: string, test: boolean) => Promise<void> }) {
   const toast = useToast()
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState(initialNote ?? '')
   const [busy, setBusy] = useState(false)
   const to = client.login_email || client.email
   return (
     <Modal label="Powiadomienie o sprawie" onClose={onClose}>
       <div className="eyebrow">Sprawy bieżące</div>
-      <h2 style={{ marginTop: 8, marginBottom: 14 }}>Prośba o dołączenie do sprawy</h2>
+      <h2 style={{ marginTop: 8, marginBottom: 14 }}>{reminder ? 'Przypomnienie o sprawie' : 'Prośba o dołączenie do sprawy'}</h2>
       <div className="stack">
         <p style={{ margin: 0 }}>
           Do: <strong>{to || 'brak adresu e-mail klienta'}</strong>
           <br />
-          Temat: <strong>{client.address_form === 'ty' ? `${client.salutation ? `${client.salutation}, n` : 'N'}owa sprawa w panelu: ${c.title}` : `Sprawa wymagająca ${client.address_form === 'pani' ? 'Pani' : client.address_form === 'pan' ? 'Pana' : 'Państwa'} udziału: ${c.title}`}</strong>
+          Temat: <strong>{reminder ? (client.address_form === 'ty' ? `${client.salutation ? `${client.salutation}, p` : 'P'}rzypomnienie o sprawie: ${c.title}` : `Przypomnienie o sprawie: ${c.title}`) : client.address_form === 'ty' ? `${client.salutation ? `${client.salutation}, n` : 'N'}owa sprawa w panelu: ${c.title}` : `Sprawa wymagająca ${client.address_form === 'pani' ? 'Pani' : client.address_form === 'pan' ? 'Pana' : 'Państwa'} udziału: ${c.title}`}</strong>
         </p>
         <p className="muted" style={{ margin: 0, fontSize: 14 }}>
-          W e-mailu będzie temat, opis{c.due_date ? ', termin' : ''} i przycisk „Otwórz sprawę” prowadzący prosto do niej w strefie klienta.
+          {reminder ? `W e-mailu będzie temat${c.due_date ? ', termin' : ''}, poniższa lista i przycisk „Otwórz sprawę”. Listę możesz zmienić.` : `W e-mailu będzie temat, pierwszy akapit opisu${c.due_date ? ', termin' : ''} i przycisk „Otwórz sprawę” prowadzący prosto do niej w strefie klienta.`}
           {!client.user_id && ' Klient nie ma jeszcze konta w panelu: najpierw załóż je w zakładce Ankiety i dostęp.'}
         </p>
         <Field label="Dodatkowa wiadomość (opcjonalnie)" value={note} onChange={setNote} textarea placeholder="np. Proszę o akceptację dokumentów do piątku." />

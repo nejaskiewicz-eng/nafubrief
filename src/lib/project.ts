@@ -69,6 +69,8 @@ export interface Task {
   visible: boolean
   /** sprawa bieżąca, do której należy zadanie */
   case_id?: string | null
+  /** dokument do przeczytania w ramach zadania (przycisk „Czytaj”) */
+  document_id?: string | null
   created_at: string
 }
 export async function listTasks(clientId: string): Promise<Task[]> {
@@ -77,7 +79,7 @@ export async function listTasks(clientId: string): Promise<Task[]> {
 export async function addTask(t: Partial<Task> & { client_id: string; title: string }) {
   must(await sb().from('client_tasks').insert(t))
 }
-export async function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'note' | 'due_date' | 'step_id' | 'position' | 'assignee' | 'visible' | 'done_at'>>) {
+export async function updateTask(id: string, patch: Partial<Pick<Task, 'title' | 'note' | 'due_date' | 'step_id' | 'position' | 'assignee' | 'visible' | 'done_at' | 'document_id'>>) {
   must(await sb().from('client_tasks').update(patch).eq('id', id))
 }
 /** Odhaczenie zadania: administratorka dowolne, klient tylko swoje (przez funkcję w bazie) */
