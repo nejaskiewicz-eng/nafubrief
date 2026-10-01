@@ -1,5 +1,6 @@
 // Sprawy bieżące: temat prowadzony z klientem od założenia do akceptacji i zamknięcia.
 // Do sprawy podpinamy ankiety, dokumenty, zadania i dostępy (kolumna case_id) i prowadzimy w niej rozmowę.
+// Klient może zaakceptować sprawę; zamyka ją zawsze administratorka, z podsumowaniem dla klienta.
 import { supabase } from './supabase'
 import type { Brief } from './types'
 import { uploadFile, type ClientFile } from './workspace'
@@ -14,7 +15,7 @@ function must<T>(res: { data: T | null; error: { message: string } | null }): T 
   return res.data as T
 }
 
-export type CaseStatus = 'open' | 'review' | 'closed'
+export type CaseStatus = 'open' | 'review' | 'accepted' | 'closed'
 export interface Case {
   id: string
   client_id: string
@@ -46,9 +47,10 @@ export interface CaseMessage {
 export const CASE_STATUS: Record<CaseStatus, string> = {
   open: 'W toku',
   review: 'Czeka na akceptację',
+  accepted: 'Zaakceptowana',
   closed: 'Zamknięta',
 }
-export const CASE_BADGE: Record<CaseStatus, string> = { open: 'in_progress', review: 'urgent', closed: 'submitted' }
+export const CASE_BADGE: Record<CaseStatus, string> = { open: 'in_progress', review: 'urgent', accepted: 'sent', closed: 'submitted' }
 
 export async function listCases(clientId: string): Promise<Case[]> {
   return must(await sb().from('cases').select('*').eq('client_id', clientId).order('updated_at', { ascending: false }))
@@ -56,17 +58,17 @@ export async function listCases(clientId: string): Promise<Case[]> {
 export async function createCase(c: { client_id: string; title: string; description?: string | null; due_date?: string | null; created_by: 'admin' | 'client' }): Promise<Case> {
   return must(await sb().from('cases').insert(c).select().single())
 }
-export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'summary' | 'status' | 'closed_at'>>) {
+export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'summary' | 'status' | 'closed_at' | 'accepted_at'>>) {
   must(await sb().from('cases').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))
 }
 export async function deleteCase(id: string) {
   must(await sb().from('cases').delete().eq('id', id))
 }
-/** Administratorka: podsumowanie i prośba o akceptację */
-export async function requestAcceptance(id: string, summary: string) {
-  await updateCase(id, { summary, status: 'review' })
+/** Administratorka prosi klienta o akceptację */
+export async function requestAcceptance(id: string) {
+  await updateCase(id, { status: 'review' })
 }
-/** Klient (albo administratorka w jego imieniu po rozmowie) akceptuje: sprawa się zamyka */
+/** Klient akceptuje; sprawa czeka na zamknięcie przez administratorkę */
 export async function acceptCase(id: string) {
   must(await sb().rpc('accept_case', { p_case: id }))
 }
@@ -74,11 +76,12 @@ export async function acceptCase(id: string) {
 export async function returnCase(id: string, reason: string) {
   must(await sb().rpc('return_case', { p_case: id, p_reason: reason }))
 }
-export async function closeCase(id: string) {
-  await updateCase(id, { status: 'closed', closed_at: new Date().toISOString() })
+/** Zamyka zawsze administratorka, z podsumowaniem dla klienta */
+export async function closeCase(id: string, summary: string) {
+  await updateCase(id, { summary, status: 'closed', closed_at: new Date().toISOString() })
 }
 export async function reopenCase(id: string) {
-  await updateCase(id, { status: 'open', closed_at: null })
+  await updateCase(id, { status: 'open', closed_at: null, accepted_at: null })
 }
 
 /* ---------- elementy sprawy ---------- */

@@ -54,7 +54,7 @@ export default function Cases({ client, isAdmin }: { client: Client; isAdmin: bo
       <div className="ws-savebar">
         <span className="muted" style={{ fontSize: 14 }}>
           {isAdmin
-            ? 'Każdy temat osobno: ankieta, dokumenty, zadania, dostępy i rozmowa w jednym miejscu, na koniec podsumowanie i akceptacja.'
+            ? 'Każdy temat osobno: ankieta, dokumenty, zadania, dostępy i rozmowa w jednym miejscu. Klient akceptuje, Ty zamykasz z podsumowaniem.'
             : 'Tu prowadzimy osobne tematy, np. dokumenty prawne. Możesz też założyć własną sprawę, gdy coś potrzebujesz ustalić.'}
         </span>
         <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>
@@ -669,76 +669,92 @@ function CaseChat({ c, isAdmin }: { c: Case; isAdmin: boolean }) {
   )
 }
 
-/* ---------- podsumowanie, akceptacja, zamknięcie ---------- */
+/* ---------- akceptacja i zamknięcie ---------- */
 
 function Closing({ c, isAdmin, run }: { c: Case; isAdmin: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
   const [summary, setSummary] = useState(c.summary ?? '')
   useEffect(() => setSummary(c.summary ?? ''), [c.summary])
+  const accepted = c.accepted_at ? `Klient zaakceptował ${fmtDate(c.accepted_at)}.` : ''
 
   return (
     <section className={`card case-sec case-close case-${c.status}`}>
-      <SecHead title="Podsumowanie i zamknięcie" />
+      <SecHead title={c.status === 'closed' ? 'Podsumowanie' : 'Akceptacja i zamknięcie'} />
 
-      {c.status === 'open' && isAdmin && (
+      {/* klient: akceptacja */}
+      {!isAdmin && c.status === 'open' && <p className="muted" style={{ margin: 0 }}>Gdy wszystko będzie gotowe, poproszę Cię tutaj o akceptację.</p>}
+      {!isAdmin && c.status === 'review' && (
         <>
-          <Field label="Podsumowanie dla klienta: co zostało zrobione i co klient akceptuje" value={summary} onChange={setSummary} textarea />
+          <p style={{ margin: 0 }}>Sprawdź, proszę, wszystko w tej sprawie i zaakceptuj albo napisz, co poprawić.</p>
           <div className="row">
-            <button className="btn btn-ghost btn-sm" onClick={() => confirm('Zamknąć sprawę bez akceptacji klienta?') && run(() => closeCase(c.id), 'Sprawa zamknięta')}>
-              Zamknij bez akceptacji
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                const reason = prompt('Co trzeba poprawić przed akceptacją?')
+                if (reason !== null) run(() => returnCase(c.id, reason), 'Przekazano uwagi')
+              }}
+            >
+              Zgłaszam poprawki
             </button>
             <span className="spacer" />
-            <button className="btn btn-primary btn-sm" disabled={!summary.trim()} onClick={() => run(() => requestAcceptance(c.id, summary.trim()), 'Wysłano do akceptacji')}>
-              Wyślij do akceptacji
+            <button className="btn btn-primary btn-sm" onClick={() => confirm('Akceptujesz wszystko w tej sprawie?') && run(() => acceptCase(c.id), 'Dziękuję, sprawa zaakceptowana')}>
+              ✓ Akceptuję
             </button>
           </div>
         </>
       )}
-      {c.status === 'open' && !isAdmin && <p className="muted" style={{ margin: 0 }}>Gdy wszystko będzie gotowe, dostaniesz tu podsumowanie do akceptacji.</p>}
+      {!isAdmin && c.status === 'accepted' && <p className="muted" style={{ margin: 0 }}>{accepted} Zamknę sprawę i dodam podsumowanie.</p>}
 
-      {c.status !== 'open' && c.summary && <div className="case-summary">{c.summary}</div>}
-
-      {c.status === 'review' && !isAdmin && (
-        <div className="row">
-          <button
-            className="btn btn-sm"
-            onClick={() => {
-              const reason = prompt('Co trzeba poprawić przed akceptacją?')
-              if (reason !== null) run(() => returnCase(c.id, reason), 'Przekazano uwagi')
-            }}
-          >
-            Zgłaszam poprawki
-          </button>
-          <span className="spacer" />
-          <button className="btn btn-primary btn-sm" onClick={() => confirm('Akceptujesz podsumowanie i zamykasz sprawę?') && run(() => acceptCase(c.id), 'Dziękuję, sprawa zaakceptowana i zamknięta')}>
-            ✓ Akceptuję i zamykam
-          </button>
-        </div>
-      )}
-      {c.status === 'review' && isAdmin && (
-        <div className="row">
-          <span className="muted" style={{ fontSize: 14 }}>Czeka na akceptację klienta.</span>
-          <span className="spacer" />
-          <button className="btn btn-ghost btn-sm" onClick={() => run(() => returnCase(c.id, ''), 'Cofnięto do toku')}>
-            Cofnij do toku
-          </button>
-          <button className="btn btn-sm" onClick={() => confirm('Zamknąć sprawę bez akceptacji klienta?') && run(() => closeCase(c.id), 'Sprawa zamknięta')}>
-            Zamknij
-          </button>
-        </div>
+      {/* administratorka: prośba o akceptację, podsumowanie, zamknięcie */}
+      {isAdmin && c.status !== 'closed' && (
+        <>
+          <div className="row">
+            {c.status === 'open' && (
+              <button className="btn btn-sm" onClick={() => run(() => requestAcceptance(c.id), 'Poproszono klienta o akceptację')}>
+                Poproś klienta o akceptację
+              </button>
+            )}
+            {c.status === 'review' && (
+              <>
+                <span className="muted" style={{ fontSize: 14 }}>Czeka na akceptację klienta.</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => run(() => returnCase(c.id, ''), 'Cofnięto prośbę o akceptację')}>
+                  Cofnij prośbę
+                </button>
+              </>
+            )}
+            {c.status === 'accepted' && <span className="badge sent">{accepted}</span>}
+          </div>
+          <Field label="Podsumowanie dla klienta (pojawi się po zamknięciu sprawy)" value={summary} onChange={setSummary} textarea />
+          <div className="row">
+            <span className="spacer" />
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!summary.trim()}
+              onClick={() =>
+                (c.status === 'accepted' || confirm('Klient nie zaakceptował jeszcze sprawy. Zamknąć mimo to?')) &&
+                run(() => closeCase(c.id, summary.trim()), 'Sprawa zamknięta')
+              }
+            >
+              Zamknij sprawę
+            </button>
+          </div>
+        </>
       )}
 
       {c.status === 'closed' && (
-        <div className="row">
-          <span className="muted" style={{ fontSize: 14 }}>
-            {c.accepted_at ? `Zaakceptowana i zamknięta ${fmtDate(c.accepted_at)}` : `Zamknięta ${fmtDate(c.closed_at)}`}
-          </span>
-          <span className="spacer" />
-          {isAdmin && (
-            <button className="btn btn-sm" onClick={() => run(() => reopenCase(c.id), 'Sprawa otwarta ponownie')}>
-              Otwórz ponownie
-            </button>
-          )}
-        </div>
+        <>
+          {c.summary && <div className="case-summary">{c.summary}</div>}
+          <div className="row">
+            <span className="muted" style={{ fontSize: 14 }}>
+              {accepted} Zamknięta {fmtDate(c.closed_at)}.
+            </span>
+            <span className="spacer" />
+            {isAdmin && (
+              <button className="btn btn-sm" onClick={() => run(() => reopenCase(c.id), 'Sprawa otwarta ponownie')}>
+                Otwórz ponownie
+              </button>
+            )}
+          </div>
+        </>
       )}
     </section>
   )
