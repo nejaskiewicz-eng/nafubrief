@@ -332,36 +332,64 @@ function DocNotes({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Pr
   const shown = (['internal', 'client'] as NoteKind[]).filter((k) => value(k) && editing?.from !== k)
   const free = (['internal', 'client'] as NoteKind[]).filter((k) => !value(k))
 
+  // przełączenie rodzaju istniejącej notatki jednym kliknięciem
+  const switchKind = async (from: NoteKind, to: NoteKind) => {
+    if (from === to) return
+    const target = value(to).trim()
+    if (to === 'client' && !confirm(doc.visible ? 'Klient od razu zobaczy tę notatkę. Zmienić na notatkę dla klienta?' : 'Klient zobaczy tę notatkę po udostępnieniu dokumentu. Zmienić na notatkę dla klienta?')) return
+    if (target && !confirm('Jest już notatka tego rodzaju. Dopisać do niej tę treść?')) return
+    setBusy(true)
+    try {
+      await write(to, [target, value(from).trim()].filter(Boolean).join('\n\n'))
+      await write(from, '')
+      await onChanged()
+    } catch (e) {
+      toast((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const KindSwitch = ({ current, onPick }: { current: NoteKind; onPick: (k: NoteKind) => void }) => (
+    <div className="note-kind" role="radiogroup" aria-label="Rodzaj notatki">
+      {(['internal', 'client'] as NoteKind[]).map((k) => (
+        <button key={k} type="button" role="radio" aria-checked={current === k} disabled={busy} className={`note-kind-opt${current === k ? ' on' : ''}`} onClick={() => onPick(k)}>
+          {k === 'internal' ? 'Wewnętrzna' : 'Dla klienta'}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <>
       {shown.map((k) => (
         <div key={k} className={`doc-note ${k === 'internal' ? 'admin-note' : 'doc-note-client'}`}>
-          <strong>{NOTE_LABEL[k]}:</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{value(k)}</span>
-          <span className="admin-note-tools">
-            <button className="link-btn" onClick={() => setEditing({ from: k, kind: k, text: value(k) })}>
-              edytuj
-            </button>
-            {' · '}
-            <button className="link-btn" onClick={() => remove(k)}>
-              usuń
-            </button>
-          </span>
+          <div className="doc-note-head">
+            <KindSwitch current={k} onPick={(to) => switchKind(k, to)} />
+            <span className="muted" style={{ fontSize: 12.5 }}>{k === 'internal' ? 'klient jej nie widzi' : 'klient ją widzi'}</span>
+            <span className="spacer" />
+            <span className="admin-note-tools">
+              <button className="link-btn" onClick={() => setEditing({ from: k, kind: k, text: value(k) })}>
+                edytuj
+              </button>
+              {' · '}
+              <button className="link-btn" onClick={() => remove(k)}>
+                usuń
+              </button>
+            </span>
+          </div>
+          <div style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>{value(k)}</div>
         </div>
       ))}
       {editing && (
         <div className="admin-note admin-note-edit">
-          <div className="note-kind" role="radiogroup" aria-label="Rodzaj notatki">
-            {(['internal', 'client'] as NoteKind[]).map((k) => (
-              <label key={k} className={`note-kind-opt${editing.kind === k ? ' on' : ''}`}>
-                <input type="radio" name={`note-kind-${doc.id}`} checked={editing.kind === k} onChange={() => setEditing({ ...editing, kind: k })} />
-                {k === 'internal' ? 'Wewnętrzna' : 'Dla klienta'}
-              </label>
-            ))}
+          <div className="doc-note-head">
+            <KindSwitch current={editing.kind} onPick={(k) => setEditing({ ...editing, kind: k })} />
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {editing.kind === 'internal' ? 'Widzisz ją tylko Ty.' : doc.visible ? 'Klient zobaczy ją pod tytułem dokumentu.' : 'Klient zobaczy ją po udostępnieniu dokumentu.'}
+              {editing.from && editing.from !== editing.kind && value(editing.kind) ? ' Treść zostanie dopisana do istniejącej notatki tego rodzaju.' : ''}
+            </span>
           </div>
-          <span className="muted" style={{ fontSize: 12.5 }}>
-            {editing.kind === 'internal' ? 'Widzisz ją tylko Ty.' : doc.visible ? 'Klient zobaczy ją pod tytułem dokumentu.' : 'Klient zobaczy ją po udostępnieniu dokumentu.'}
-            {editing.from && editing.from !== editing.kind && value(editing.kind) ? ' Treść zostanie dopisana do istniejącej notatki tego rodzaju.' : ''}
-          </span>
           <textarea className="textarea" style={{ minHeight: 110 }} value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })} autoFocus />
           <div className="row">
             <button className="btn btn-sm" onClick={() => setEditing(null)}>
@@ -374,9 +402,13 @@ function DocNotes({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Pr
         </div>
       )}
       {!editing && free.length > 0 && (
-        <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setEditing({ from: null, kind: free[0], text: '' })}>
-          <Icon name="plus" size={14} /> Notatka
-        </button>
+        <div className="row" style={{ marginTop: 6, gap: 4 }}>
+          {free.map((k) => (
+            <button key={k} className="btn btn-ghost btn-sm" onClick={() => setEditing({ from: null, kind: k, text: '' })}>
+              <Icon name="plus" size={14} /> {k === 'internal' ? 'Notatka wewnętrzna' : 'Notatka dla klienta'}
+            </button>
+          ))}
+        </div>
       )}
     </>
   )

@@ -4005,10 +4005,18 @@ body.is-sorting * {
   font-size: 13px;
   cursor: pointer;
 }
-.note-kind-opt input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
+.note-kind-opt {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: inherit;
+}
+.doc-note-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .note-kind-opt.on {
   background: var(--teal, #0a7189);
