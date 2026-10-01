@@ -112,6 +112,8 @@ export interface Brief {
   step_id: string | null
   /** kolejność w etapie */
   step_position: number
+  /** sprawa bieżąca, do której należy ankieta */
+  case_id?: string | null
   opened_at: string | null
   submitted_at: string | null
   created_at: string

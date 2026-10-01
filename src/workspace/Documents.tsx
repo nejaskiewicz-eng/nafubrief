@@ -6,20 +6,31 @@ import type { Client } from '../lib/types'
 import { signedUrls } from '../lib/workspace'
 import { Empty, Field, Toggle } from './bits'
 
-export default function Documents({ client, isAdmin, adminTools }: { client: Client; isAdmin: boolean; adminTools?: ReactNode }) {
+export default function Documents({
+  client, isAdmin, adminTools, caseId, onChanged,
+}: {
+  client: Client
+  isAdmin: boolean
+  adminTools?: ReactNode
+  /** tylko dokumenty tej sprawy bieżącej; nowe dokumenty trafiają do niej */
+  caseId?: string
+  onChanged?: () => void
+}) {
   const toast = useToast()
   const [docs, setDocs] = useState<ClientDocument[] | null>(null)
   const [adding, setAdding] = useState(false)
   const [reading, setReading] = useState<ClientDocument | null>(null)
 
   const load = useCallback(async () => {
-    const list = await listDocuments(client.id)
+    const all = await listDocuments(client.id)
+    const list = caseId ? all.filter((d) => d.case_id === caseId) : all
     if (isAdmin) {
       const notes = await listDocumentNotes(client.id).catch(() => ({}) as Record<string, string>)
       list.forEach((d) => (d.admin_note = notes[d.id] ?? null))
     }
     setDocs(list)
-  }, [client.id, isAdmin])
+    onChanged?.()
+  }, [client.id, isAdmin, caseId, onChanged])
   useEffect(() => {
     load().catch((e) => toast((e as Error).message))
   }, [load, toast])
@@ -46,7 +57,7 @@ export default function Documents({ client, isAdmin, adminTools }: { client: Cli
 
   return (
     <div className="ws">
-      {adminTools}
+      {!caseId && adminTools}
 
       {isAdmin && (
         <div className="ws-savebar">
@@ -58,7 +69,11 @@ export default function Documents({ client, isAdmin, adminTools }: { client: Cli
       )}
 
       {docs.length === 0 ? (
+        caseId ? (
+          <p className="muted" style={{ margin: 0 }}>{isAdmin ? 'Brak dokumentów w tej sprawie.' : 'Dokumenty do tej sprawy pojawią się tutaj.'}</p>
+        ) : (
         <Empty title={isAdmin ? 'Brak dokumentów' : 'Tu znajdziesz dokumenty'} text={isAdmin ? 'Dodaj umowę albo przygotuj dokumenty prawne.' : 'Umowa i dokumenty do Twojej strony pojawią się tutaj. Dostaniesz ode mnie wiadomość.'} />
+        )
       ) : (
         <div className="card">
           {docs.map((d) => (
@@ -135,7 +150,7 @@ export default function Documents({ client, isAdmin, adminTools }: { client: Cli
         <AddDoc
           onClose={() => setAdding(false)}
           onSave={async (title, file, requires, visible, note) => {
-            await addDocument(client.id, title, file, { requiresAcceptance: requires, visible, note })
+            await addDocument(client.id, title, file, { requiresAcceptance: requires, visible, note, caseId })
             setAdding(false)
             load()
           }}

@@ -4,7 +4,9 @@ import { CONTACT, Loading } from '../../components/ui'
 import { api, type Session } from '../../lib/api'
 import type { Client } from '../../lib/types'
 import { unreadCount } from '../../lib/workspace'
+import { caseUnread } from '../../lib/cases'
 import Access from '../../workspace/Access'
+import Cases from '../../workspace/Cases'
 import Documents from '../../workspace/Documents'
 import Media from '../../workspace/Media'
 import Preview from '../../workspace/Preview'
@@ -58,6 +60,7 @@ export default function ClientArea() {
 
 const TABS: Array<[string, string]> = [
   ['', 'Start'],
+  ['sprawy', 'Sprawy bieżące'],
   ['podglad', 'Podgląd strony'],
   ['profil', 'Profil firmy'],
   ['media', 'Baza mediów'],
@@ -71,6 +74,7 @@ const TABS: Array<[string, string]> = [
 /** Nagłówek z zakładkami dla zalogowanego klienta */
 export function ClientChrome({ children, email, client }: { children: ReactNode; email: string; client: Client }) {
   const [unread, setUnread] = useState(0)
+  const [caseDot, setCaseDot] = useState(0)
   const loc = useLocation()
   const [menu, setMenu] = useState(false)
   const section = loc.pathname.split('/')[2] ?? ''
@@ -78,6 +82,9 @@ export function ClientChrome({ children, email, client }: { children: ReactNode;
   useEffect(() => setMenu(false), [loc.pathname])
   useEffect(() => {
     unreadCount(client.id, false).then(setUnread).catch(() => {})
+    caseUnread(client.id, false)
+      .then((m) => setCaseDot(Object.values(m).reduce((a, b) => a + b, 0)))
+      .catch(() => {})
   }, [client.id, loc.pathname])
 
   return (
@@ -112,6 +119,7 @@ export function ClientChrome({ children, email, client }: { children: ReactNode;
                 <NavLink key={path} to={`/${client.slug}${path ? `/${path}` : ''}`} end>
                   {label}
                   {path === 'wiadomosci' && unread > 0 && <span className="dotn">{unread}</span>}
+                  {path === 'sprawy' && caseDot > 0 && <span className="dotn">{caseDot}</span>}
                 </NavLink>
               ))}
             </div>
@@ -136,12 +144,13 @@ export function ClientChrome({ children, email, client }: { children: ReactNode;
 }
 
 /** Zakładki strefy klienta (tylko po zalogowaniu) */
-export function ClientTab({ tab }: { tab: 'podglad' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'dostepy' | 'dokumenty' | 'wiadomosci' }) {
+export function ClientTab({ tab }: { tab: 'sprawy' | 'podglad' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'dostepy' | 'dokumenty' | 'wiadomosci' }) {
   const { client = '' } = useParams()
   const { session, mine } = useClientCtx()
   if (!session || !mine) return <Navigate to={`/logowanie?next=${encodeURIComponent(`/${client}/${tab}`)}`} replace />
   return (
     <ClientChrome email={session.email} client={mine}>
+      {tab === 'sprawy' && <Cases client={mine} isAdmin={false} />}
       {tab === 'podglad' && <Preview client={mine} isAdmin={false} />}
       {tab === 'dostepy' && <Access clientId={mine.id} isAdmin={false} />}
       {tab === 'dokumenty' && <Documents client={mine} isAdmin={false} />}

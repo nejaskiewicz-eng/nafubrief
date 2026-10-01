@@ -9,7 +9,15 @@ import { Field, Toggle } from './bits'
 const STATUS_LABEL: Record<AccessStatus, string> = { todo: 'Do przekazania', done: 'Przekazane', na: 'Nie dotyczy' }
 const STATUS_BADGE: Record<AccessStatus, string> = { todo: 'in_progress', done: 'submitted', na: 'draft' }
 
-export default function Access({ clientId, isAdmin }: { clientId: string; isAdmin: boolean }) {
+export default function Access({
+  clientId, isAdmin, caseId, onChanged,
+}: {
+  clientId: string
+  isAdmin: boolean
+  /** tylko dostępy tej sprawy bieżącej; nowe pozycje trafiają do niej */
+  caseId?: string
+  onChanged?: () => void
+}) {
   const toast = useToast()
   const [items, setItems] = useState<AccessItem[] | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
@@ -19,9 +27,10 @@ export default function Access({ clientId, isAdmin }: { clientId: string; isAdmi
 
   const load = useCallback(async () => {
     const [list, st] = await Promise.all([listAccess(clientId), isAdmin ? listSteps(clientId) : Promise.resolve([])])
-    setItems(list)
+    setItems(caseId ? list.filter((i) => i.case_id === caseId) : list)
     setSteps(st)
-  }, [clientId, isAdmin])
+    onChanged?.()
+  }, [clientId, isAdmin, caseId, onChanged])
 
   useEffect(() => {
     load().catch((e) => toast((e as Error).message))
@@ -46,11 +55,11 @@ export default function Access({ clientId, isAdmin }: { clientId: string; isAdmi
         <span style={{ fontSize: 14.5 }}>
           {isAdmin ? (
             <>
-              Przekazane: <strong>{done}</strong> z {items.length}. Dopisz, czego potrzebujesz. Klient też może dodawać swoje pozycje.
+              Przekazane: <strong>{done}</strong> z {items.length}. {caseId ? 'Dopisz, do czego potrzebujesz dostępu w tej sprawie. Klientka udziela go tutaj.' : 'Dopisz, czego potrzebujesz. Klient też może dodawać swoje pozycje.'}
             </>
           ) : (
             <>
-              Tu wymieniamy się dostępami. Ja dopisuję, czego potrzebuję, a Ty możesz dodać wszystko, co jeszcze masz. Gdzie się da, zaproś mnie adresem <strong>{ADMIN_EMAIL}</strong>.
+              {caseId ? 'Tu udzielasz dostępów potrzebnych w tej sprawie.' : 'Tu wymieniamy się dostępami. Ja dopisuję, czego potrzebuję, a Ty możesz dodać wszystko, co jeszcze masz.'} Gdzie się da, zaproś mnie adresem <strong>{ADMIN_EMAIL}</strong>.
             </>
           )}
         </span>
@@ -66,7 +75,7 @@ export default function Access({ clientId, isAdmin }: { clientId: string; isAdmi
         </div>
       </div>
 
-      {items.length === 0 && (
+      {items.length === 0 && !caseId && (
         <div className="card empty">
           <h3>{isAdmin ? 'Lista dostępów jest pusta' : 'Nie ma jeszcze żadnych dostępów'}</h3>
           <p className="muted" style={{ margin: 0, maxWidth: 460 }}>
@@ -96,7 +105,7 @@ export default function Access({ clientId, isAdmin }: { clientId: string; isAdmi
           onClose={() => setEditing(null)}
           onSave={async (patch) => {
             if (editing.id) await run(() => updateAccess(editing.id!, patch), 'Zapisano')
-            else await run(() => addAccess({ ...patch, client_id: clientId, title: patch.title ?? 'Dostęp', created_by: isAdmin ? 'admin' : 'client', position: items.length }), 'Dodano')
+            else await run(() => addAccess({ ...patch, client_id: clientId, title: patch.title ?? 'Dostęp', created_by: isAdmin ? 'admin' : 'client', position: items.length, ...(caseId ? { case_id: caseId } : {}) }), 'Dodano')
             setEditing(null)
           }}
         />
@@ -107,7 +116,7 @@ export default function Access({ clientId, isAdmin }: { clientId: string; isAdmi
           existing={items}
           onClose={() => setCatalog(false)}
           onAdd={async (keys) => {
-            await run(() => addAccessFromCatalog(clientId, keys, items), 'Dodano')
+            await run(() => addAccessFromCatalog(clientId, keys, items, caseId), 'Dodano')
             setCatalog(false)
           }}
         />

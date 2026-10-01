@@ -42,6 +42,7 @@ const router = createBrowserRouter([
     element: <ClientArea />,
     children: [
       { index: true, element: <Portal /> },
+      { path: 'sprawy', element: <ClientTab tab="sprawy" /> },
       { path: 'podglad', element: <ClientTab tab="podglad" /> },
       { path: 'dostepy', element: <ClientTab tab="dostepy" /> },
       { path: 'dokumenty', element: <ClientTab tab="dokumenty" /> },

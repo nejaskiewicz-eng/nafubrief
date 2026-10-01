@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   CONTACT, Icon, Modal, Spinner, StatusBadge, TEMPLATE_COLORS, TEMPLATE_LETTER,
   copyText, downloadFile, fmtDate, useToast,
@@ -13,6 +13,8 @@ import { deleteSummary, listSummaries, requestSummary } from '../../lib/adminApi
 import { isDemo } from '../../lib/supabase'
 import { unreadCount } from '../../lib/workspace'
 import Access from '../../workspace/Access'
+import Cases from '../../workspace/Cases'
+import { caseUnread } from '../../lib/cases'
 import Documents from '../../workspace/Documents'
 import Media from '../../workspace/Media'
 import Preview from '../../workspace/Preview'
@@ -24,10 +26,11 @@ import Profile from '../../workspace/Profile'
 import Services from '../../workspace/Services'
 import Team from '../../workspace/Team'
 
-type Tab = 'start' | 'briefs' | 'podglad' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'dostepy' | 'dokumenty' | 'wiadomosci' | 'ai' | 'data'
+type Tab = 'start' | 'sprawy' | 'briefs' | 'podglad' | 'profil' | 'media' | 'zespol' | 'uslugi' | 'dostepy' | 'dokumenty' | 'wiadomosci' | 'ai' | 'data'
 
 const TAB_LABELS: Array<[Tab, string]> = [
   ['start', 'Przebieg projektu'],
+  ['sprawy', 'Sprawy bieżące'],
   ['briefs', 'Ankiety i dostęp'],
   ['podglad', 'Podgląd strony'],
   ['profil', 'Profil firmy'],
@@ -45,10 +48,16 @@ export default function ClientDetail() {
   const { id = '' } = useParams()
   const [client, setClient] = useState<Client | null>(null)
   const [briefs, setBriefs] = useState<Brief[] | null>(null)
-  const [tab, setTab] = useState<Tab>('start')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(params.get('sprawa') ? 'sprawy' : 'start')
   const [unread, setUnread] = useState(0)
+  const [caseDot, setCaseDot] = useState(0)
   useEffect(() => {
-    if (!isDemo) unreadCount(id, true).then(setUnread).catch(() => {})
+    if (isDemo) return
+    unreadCount(id, true).then(setUnread).catch(() => {})
+    caseUnread(id, true)
+      .then((m) => setCaseDot(Object.values(m).reduce((a, b) => a + b, 0)))
+      .catch(() => {})
   }, [id, tab])
 
   const reload = useCallback(async () => {
@@ -92,12 +101,14 @@ export default function ClientDetail() {
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
             {label}
             {k === 'wiadomosci' && unread > 0 && <span className="tab-dot">{unread}</span>}
+            {k === 'sprawy' && caseDot > 0 && <span className="tab-dot">{caseDot}</span>}
           </button>
         ))}
       </div>
 
       {tab === 'briefs' && <BriefsTab client={client} briefs={briefs} reload={reload} />}
       {tab === 'start' && <Start client={client} briefs={briefs} isAdmin templates={TEMPLATES.map((t) => ({ key: t.key, title: t.title }))} onBriefsChanged={reload} onGo={(t) => setTab(t === 'start' ? 'start' : (t as Tab))} />}
+      {tab === 'sprawy' && <Cases client={client} isAdmin />}
       {tab === 'podglad' && <Preview client={client} isAdmin />}
       {tab === 'dostepy' && <Access clientId={client.id} isAdmin />}
       {tab === 'dokumenty' && <Documents client={client} isAdmin adminTools={<LegalCommands client={client} />} />}

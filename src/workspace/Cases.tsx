@@ -1,0 +1,774 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../components/ui'
+import { api } from '../lib/api'
+import {
+  CASE_BADGE, CASE_STATUS, acceptCase, addCaseBrief, caseUnread, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
+  linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
+  type Case, type CaseItems, type CaseMessage,
+} from '../lib/cases'
+import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateTask, type Task } from '../lib/project'
+import type { Brief, Client } from '../lib/types'
+import { signedUrls } from '../lib/workspace'
+import Access from './Access'
+import { Empty, Field, Toggle } from './bits'
+import Documents from './Documents'
+
+const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
+
+/** Sprawy bieżące: lista spraw klienta i widok jednej sprawy (adres ?sprawa=id) */
+export default function Cases({ client, isAdmin }: { client: Client; isAdmin: boolean }) {
+  const toast = useToast()
+  const [params, setParams] = useSearchParams()
+  const [cases, setCases] = useState<Case[] | null>(null)
+  const [unread, setUnread] = useState<Record<string, number>>({})
+  const [creating, setCreating] = useState(false)
+  const openId = params.get('sprawa')
+
+  const load = useCallback(async () => {
+    const [list, un] = await Promise.all([listCases(client.id), caseUnread(client.id, isAdmin).catch(() => ({}))])
+    setCases(list)
+    setUnread(un)
+  }, [client.id, isAdmin])
+
+  useEffect(() => {
+    load().catch((e) => toast((e as Error).message))
+  }, [load, toast])
+
+  const open = (id: string | null) => {
+    const next = new URLSearchParams(params)
+    if (id) next.set('sprawa', id)
+    else next.delete('sprawa')
+    setParams(next)
+  }
+
+  if (!cases) return <Spinner />
+  const current = openId ? cases.find((c) => c.id === openId) : null
+  if (current) return <CaseView key={current.id} client={client} c={current} isAdmin={isAdmin} onBack={() => open(null)} onChanged={load} />
+
+  const active = cases.filter((c) => c.status !== 'closed')
+  const closed = cases.filter((c) => c.status === 'closed')
+
+  return (
+    <div className="ws">
+      <div className="ws-savebar">
+        <span className="muted" style={{ fontSize: 14 }}>
+          {isAdmin
+            ? 'Każdy temat osobno: ankieta, dokumenty, zadania, dostępy i rozmowa w jednym miejscu, na koniec podsumowanie i akceptacja.'
+            : 'Tu prowadzimy osobne tematy, np. dokumenty prawne. Możesz też założyć własną sprawę, gdy coś potrzebujesz ustalić.'}
+        </span>
+        <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>
+          <Icon name="plus" size={15} /> Nowa sprawa
+        </button>
+      </div>
+
+      {cases.length === 0 && (
+        <Empty
+          title={isAdmin ? 'Brak spraw' : 'Nie ma jeszcze spraw'}
+          text={isAdmin ? 'Załóż sprawę, gdy temat wymaga kilku kroków i akceptacji klienta.' : 'Gdy zaczniemy nowy temat, pojawi się tutaj. Możesz też założyć sprawę sama lub sam.'}
+        />
+      )}
+      {active.length > 0 && <CaseList title="W toku" list={active} unread={unread} isAdmin={isAdmin} onOpen={open} />}
+      {closed.length > 0 && <CaseList title="Zamknięte" list={closed} unread={unread} isAdmin={isAdmin} onOpen={open} />}
+
+      {creating && (
+        <NewCase
+          isAdmin={isAdmin}
+          onClose={() => setCreating(false)}
+          onSave={async (title, description, due) => {
+            const c = await createCase({ client_id: client.id, title, description: description || null, due_date: due || null, created_by: isAdmin ? 'admin' : 'client' })
+            setCreating(false)
+            await load()
+            open(c.id)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function CaseList({ title, list, unread, isAdmin, onOpen }: { title: string; list: Case[]; unread: Record<string, number>; isAdmin: boolean; onOpen: (id: string) => void }) {
+  return (
+    <div className="card">
+      <div className="eyebrow" style={{ padding: '4px 4px 10px' }}>{title}</div>
+      {list.map((c) => (
+        <button className="brief-row case-row" key={c.id} onClick={() => onOpen(c.id)}>
+          <div className="brief-icon" style={{ background: c.status === 'closed' ? '#8aa0a7' : 'linear-gradient(135deg,#0a7189,#02afca)' }}>
+            <Icon name="doc" size={20} />
+          </div>
+          <div style={{ minWidth: 0, textAlign: 'left' }}>
+            <h3>{c.title}</h3>
+            <div className="meta">
+              <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
+              {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
+              {c.due_date && c.status !== 'closed' && <span>termin {fmtDay(c.due_date)}</span>}
+              <span>zmiana {fmtDate(c.updated_at)}</span>
+            </div>
+          </div>
+          <div className="actions">
+            {unread[c.id] > 0 && <span className="tab-dot">{unread[c.id]}</span>}
+            <span className="btn btn-sm">Otwórz</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function NewCase({ isAdmin, onClose, onSave }: { isAdmin: boolean; onClose: () => void; onSave: (title: string, description: string, due: string) => Promise<void> }) {
+  const toast = useToast()
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [due, setDue] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <Modal label="Nowa sprawa" onClose={onClose}>
+      <div className="eyebrow">Sprawy bieżące</div>
+      <h2 style={{ marginTop: 8, marginBottom: 14 }}>Nowa sprawa</h2>
+      <div className="stack">
+        <Field label="Temat" value={title} onChange={setTitle} placeholder={isAdmin ? 'np. Dokumenty prawne dla obecnej strony' : 'np. Zmiana godzin otwarcia na stronie'} />
+        <Field label="Opis" value={description} onChange={setDescription} textarea placeholder={isAdmin ? 'Co trzeba zrobić i czego potrzebuję od klienta' : 'Opisz, czego dotyczy sprawa'} />
+        {isAdmin && <Field label="Termin (opcjonalnie)" type="date" value={due} onChange={setDue} />}
+      </div>
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Anuluj
+        </button>
+        <button
+          className="btn btn-primary"
+          disabled={busy}
+          onClick={async () => {
+            if (!title.trim()) return toast('Podaj temat sprawy.')
+            setBusy(true)
+            try {
+              await onSave(title.trim(), description.trim(), due)
+            } catch (e) {
+              toast((e as Error).message)
+              setBusy(false)
+            }
+          }}
+        >
+          Załóż sprawę
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c: Case; isAdmin: boolean; onBack: () => void; onChanged: () => Promise<void> }) {
+  const toast = useToast()
+  const [items, setItems] = useState<CaseItems | null>(null)
+  const [editing, setEditing] = useState(false)
+  const canEditCase = isAdmin || (c.created_by === 'client' && c.status === 'open')
+  const locked = c.status === 'closed'
+
+  const loadItems = useCallback(async () => {
+    setItems(await listCaseItems(c.id))
+  }, [c.id])
+  useEffect(() => {
+    loadItems().catch((e) => toast((e as Error).message))
+  }, [loadItems, toast])
+
+  const run = async (fn: () => Promise<unknown>, msg?: string) => {
+    try {
+      await fn()
+      if (msg) toast(msg)
+    } catch (e) {
+      toast((e as Error).message)
+    }
+    await Promise.all([loadItems(), onChanged()])
+  }
+
+  return (
+    <div className="ws case">
+      <div className="ws-savebar">
+        <button className="btn btn-ghost btn-sm" onClick={onBack}>
+          <Icon name="back" size={15} /> Wszystkie sprawy
+        </button>
+        <div className="row">
+          {canEditCase && !locked && (
+            <button className="btn btn-sm" onClick={() => setEditing(true)}>
+              <Icon name="edit" size={15} /> Edytuj
+            </button>
+          )}
+          {canEditCase && (
+            <button
+              className="btn btn-sm btn-danger"
+              aria-label="Usuń sprawę"
+              onClick={async () => {
+                if (!confirm(`Usunąć sprawę „${c.title}”? Ankiety, dokumenty, zadania i dostępy zostaną w panelu, tylko bez przypisania do sprawy. Rozmowa zostanie usunięta.`)) return
+                await run(() => deleteCase(c.id), 'Usunięto sprawę')
+                onBack()
+              }}
+            >
+              <Icon name="trash" size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <section className="card case-head">
+        <div className="meta">
+          <span className={`badge ${CASE_BADGE[c.status]}`}>{CASE_STATUS[c.status]}</span>
+          {c.created_by === 'client' && <span className="badge draft">{isAdmin ? 'Założona przez klienta' : 'Założona przez Ciebie'}</span>}
+          {c.due_date && <span>termin {fmtDay(c.due_date)}</span>}
+          <span>założona {fmtDate(c.created_at)}</span>
+        </div>
+        <h2>{c.title}</h2>
+        {c.description && <p className="case-desc">{c.description}</p>}
+      </section>
+
+      {!items ? (
+        <Spinner />
+      ) : (
+        <>
+          <TasksBlock client={client} c={c} tasks={items.tasks} isAdmin={isAdmin} locked={locked} run={run} />
+          <BriefsBlock client={client} c={c} briefs={items.briefs} isAdmin={isAdmin} locked={locked} run={run} />
+
+          <section className="card case-sec">
+            <SecHead title="Dokumenty" hint={isAdmin ? 'Szkice są widoczne tylko dla Ciebie, dopóki ich nie udostępnisz.' : 'Przeczytaj i zaakceptuj dokumenty przygotowane w tej sprawie.'} />
+            {isAdmin && !locked && (
+              <LinkExisting
+                label="Podepnij dokument"
+                load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
+                onPick={(id) => run(() => linkItem('client_documents', id, c.id), 'Podpięto dokument')}
+              />
+            )}
+            <Documents client={client} isAdmin={isAdmin} caseId={c.id} key={`d-${items.documents.length}`} />
+          </section>
+
+          <section className="card case-sec">
+            <SecHead title="Dostępy" hint={isAdmin ? 'Dopisz, do czego potrzebujesz dostępu w tej sprawie.' : 'Tu udzielasz dostępów potrzebnych w tej sprawie.'} />
+            {isAdmin && !locked && (
+              <LinkExisting
+                label="Podepnij dostęp z listy"
+                load={async () => (await listAccess(client.id)).filter((a) => !a.case_id).map((a) => ({ id: a.id, label: a.title }))}
+                onPick={(id) => run(() => linkItem('access_items', id, c.id), 'Podpięto dostęp')}
+              />
+            )}
+            <Access clientId={client.id} isAdmin={isAdmin} caseId={c.id} key={`a-${items.access.length}`} />
+          </section>
+
+          <CaseChat c={c} isAdmin={isAdmin} />
+          <Closing c={c} isAdmin={isAdmin} run={run} />
+        </>
+      )}
+
+      {editing && (
+        <EditCase
+          c={c}
+          isAdmin={isAdmin}
+          onClose={() => setEditing(false)}
+          onSave={async (patch) => {
+            await run(() => updateCase(c.id, patch), 'Zapisano')
+            setEditing(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function SecHead({ title, hint, children }: { title: string; hint?: string; children?: ReactNode }) {
+  return (
+    <div className="case-sec-head">
+      <div>
+        <h3>{title}</h3>
+        {hint && <p className="muted">{hint}</p>}
+      </div>
+      {children && <div className="row">{children}</div>}
+    </div>
+  )
+}
+
+/** Wybór istniejącego elementu klienta, który nie należy jeszcze do żadnej sprawy */
+function LinkExisting({ label, load, onPick }: { label: string; load: () => Promise<Array<{ id: string; label: string }>>; onPick: (id: string) => Promise<void> }) {
+  const [opts, setOpts] = useState<Array<{ id: string; label: string }> | null>(null)
+  if (!opts)
+    return (
+      <button className="btn btn-ghost btn-sm case-link-btn" onClick={async () => setOpts(await load())}>
+        <Icon name="link" size={15} /> {label}
+      </button>
+    )
+  if (opts.length === 0) return <p className="muted case-link-btn">Nie ma pozycji bez przypisanej sprawy.</p>
+  return (
+    <select
+      className="select case-link-btn"
+      defaultValue=""
+      onChange={async (e) => {
+        if (!e.target.value) return
+        await onPick(e.target.value)
+        setOpts(null)
+      }}
+    >
+      <option value="">{label}…</option>
+      {opts.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/* ---------- zadania ---------- */
+
+function TasksBlock({ client, c, tasks, isAdmin, locked, run }: { client: Client; c: Case; tasks: Task[]; isAdmin: boolean; locked: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
+  const [title, setTitle] = useState('')
+  const [note, setNote] = useState('')
+  const [due, setDue] = useState('')
+  const [assignee, setAssignee] = useState<'client' | 'nafu'>('client')
+  const [visible, setVisible] = useState(true)
+  const [adding, setAdding] = useState(false)
+  if (!isAdmin && tasks.length === 0) return null
+  const done = tasks.filter((t) => t.done_at).length
+
+  return (
+    <section className="card case-sec">
+      <SecHead title="Zadania" hint={tasks.length ? `Zrobione: ${done} z ${tasks.length}` : 'Zadania dla klienta i dla Ciebie w tej sprawie.'}>
+        {isAdmin && !locked && (
+          <button className="btn btn-sm" onClick={() => setAdding(!adding)}>
+            <Icon name="plus" size={15} /> Zadanie
+          </button>
+        )}
+        {isAdmin && !locked && (
+          <LinkExisting
+            label="Podepnij zadanie"
+            load={async () => (await listTasks(client.id)).filter((t) => !t.case_id).map((t) => ({ id: t.id, label: t.title }))}
+            onPick={(id) => run(() => linkItem('client_tasks', id, c.id), 'Podpięto zadanie')}
+          />
+        )}
+      </SecHead>
+
+      {adding && (
+        <div className="case-form">
+          <Field label="Zadanie" value={title} onChange={setTitle} placeholder="np. Sprawdzić personel w Rejestrze Sprawców i KRK" />
+          <Field label="Opis (widzi klient, jeśli zadanie jest widoczne)" value={note} onChange={setNote} textarea />
+          <div className="row">
+            <div className="seg" role="radiogroup" aria-label="Kto wykonuje">
+              <button className={assignee === 'client' ? 'on' : ''} onClick={() => setAssignee('client')}>
+                Klient
+              </button>
+              <button className={assignee === 'nafu' ? 'on' : ''} onClick={() => setAssignee('nafu')}>
+                Ja
+              </button>
+            </div>
+            <input className="input st-date" type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Termin" />
+            <Toggle checked={visible} onChange={setVisible} label="Widoczne dla klienta" />
+            <span className="spacer" />
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!title.trim()}
+              onClick={async () => {
+                await run(
+                  () => addTask({ client_id: client.id, case_id: c.id, title: title.trim(), note: note.trim() || null, due_date: due || null, assignee, visible, position: tasks.length }),
+                  'Dodano zadanie',
+                )
+                setTitle('')
+                setNote('')
+                setDue('')
+                setAdding(false)
+              }}
+            >
+              Dodaj
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tasks.map((t) => {
+        const canTick = !locked && (isAdmin || t.assignee === 'client')
+        return (
+          <div key={t.id} className={`st-item task${t.done_at ? ' done' : ''}${!t.visible ? ' hidden-task' : ''}`}>
+            {canTick ? (
+              <button className={`todo-check${t.done_at ? ' on' : ''}`} aria-label={t.done_at ? 'Oznacz jako niezrobione' : 'Potwierdź wykonanie'} onClick={() => run(() => toggleTask(t, isAdmin))}>
+                {t.done_at ? '✓' : ''}
+              </button>
+            ) : (
+              <span className={`todo-auto${t.done_at ? ' ok' : ''}`}>{t.done_at ? '✓' : '•'}</span>
+            )}
+            <span className="st-item-title">
+              {t.title}
+              {t.note && <span className="muted st-item-note">{t.note}</span>}
+            </span>
+            <span className={`badge ${t.assignee === 'client' ? 'sent' : 'draft'}`}>{t.assignee === 'client' ? (isAdmin ? 'Klient' : 'Twoje zadanie') : isAdmin ? 'Ja' : 'Po stronie NAFU Design'}</span>
+            {isAdmin && !t.visible && <span className="badge draft">Ukryte przed klientem</span>}
+            {t.due_date && <span className="muted" style={{ fontSize: 12.5 }}>do {fmtDay(t.due_date)}</span>}
+            {t.done_at && <span className="muted" style={{ fontSize: 12.5 }}>potwierdzone {fmtDate(t.done_at)}</span>}
+            {isAdmin && (
+              <span className="st-item-tools">
+                <button className="btn btn-ghost btn-sm" onClick={() => run(() => updateTask(t.id, { visible: !t.visible }))}>
+                  {t.visible ? 'Ukryj' : 'Pokaż klientowi'}
+                </button>
+                <button className="btn btn-ghost btn-icon" aria-label="Odepnij od sprawy" title="Odepnij od sprawy" onClick={() => run(() => linkItem('client_tasks', t.id, null), 'Odpięto')}>
+                  <Icon name="link" size={14} />
+                </button>
+                <button className="btn btn-ghost btn-icon btn-danger" aria-label="Usuń zadanie" onClick={() => confirm(`Usunąć zadanie „${t.title}”?`) && run(() => deleteTask(t.id))}>
+                  <Icon name="trash" size={14} />
+                </button>
+              </span>
+            )}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+/* ---------- ankiety ---------- */
+
+function BriefsBlock({ client, c, briefs, isAdmin, locked, run }: { client: Client; c: Case; briefs: Brief[]; isAdmin: boolean; locked: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
+  const [naming, setNaming] = useState(false)
+  const [title, setTitle] = useState('')
+  const shown = isAdmin ? briefs : briefs.filter((b) => b.status !== 'draft')
+  if (!isAdmin && shown.length === 0) return null
+
+  return (
+    <section className="card case-sec">
+      <SecHead title="Ankiety i pytania" hint={isAdmin ? 'Zadaj pytania w formie nowej ankiety albo podepnij istniejącą.' : 'Odpowiedz na pytania potrzebne w tej sprawie.'}>
+        {isAdmin && !locked && (
+          <button className="btn btn-sm" onClick={() => setNaming(!naming)}>
+            <Icon name="plus" size={15} /> Nowe pytania
+          </button>
+        )}
+        {isAdmin && !locked && (
+          <LinkExisting
+            label="Podepnij ankietę"
+            load={async () => (await api.listBriefs(client.id)).filter((b) => !b.case_id).map((b) => ({ id: b.id, label: b.title }))}
+            onPick={(id) => run(() => linkItem('briefs', id, c.id), 'Podpięto ankietę')}
+          />
+        )}
+      </SecHead>
+
+      {naming && (
+        <div className="case-form">
+          <Field label="Tytuł ankiety (widzi go klient)" value={title} onChange={setTitle} placeholder="np. Pytania do dokumentów prawnych" />
+          <div className="row">
+            <span className="muted" style={{ fontSize: 13.5 }}>Po utworzeniu otworzy się edytor pytań. Ankieta jest szkicem, dopóki jej nie wyślesz.</span>
+            <span className="spacer" />
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!title.trim()}
+              onClick={async () => {
+                try {
+                  const b = await addCaseBrief(client.id, c.id, title.trim())
+                  window.location.assign(`/panel/ankieta/${b.id}/edycja`)
+                } catch (e) {
+                  await run(() => Promise.reject(e))
+                }
+              }}
+            >
+              Utwórz i dodaj pytania
+            </button>
+          </div>
+        </div>
+      )}
+
+      {shown.length === 0 && <p className="muted" style={{ margin: 0 }}>Brak ankiet w tej sprawie.</p>}
+      {shown.map((b) => (
+        <div className="brief-row" key={b.id}>
+          <div className="brief-icon" style={{ background: 'linear-gradient(135deg,#0a7189,#02afca)' }}>
+            <Icon name="edit" size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h3>{b.title}</h3>
+            <div className="meta">
+              <StatusBadge status={b.status} />
+              {b.submitted_at && <span>wysłana {fmtDate(b.submitted_at)}</span>}
+            </div>
+          </div>
+          <div className="actions">
+            {isAdmin ? (
+              <>
+                {b.status === 'draft' && (
+                  <>
+                    <Link className="btn btn-sm" to={`/panel/ankieta/${b.id}/edycja`}>
+                      <Icon name="edit" size={15} /> Pytania
+                    </Link>
+                    {!locked && (
+                      <button className="btn btn-sm btn-primary" onClick={() => run(() => api.updateBrief(b.id, { status: 'sent' }), 'Ankieta jest widoczna dla klienta')}>
+                        Wyślij klientowi
+                      </button>
+                    )}
+                  </>
+                )}
+                {b.status !== 'draft' && (
+                  <Link className="btn btn-sm" to={`/panel/ankieta/${b.id}`}>
+                    <Icon name="eye" size={15} /> Odpowiedzi
+                  </Link>
+                )}
+                <button className="btn btn-ghost btn-icon" aria-label="Odepnij od sprawy" title="Odepnij od sprawy" onClick={() => run(() => linkItem('briefs', b.id, null), 'Odpięto')}>
+                  <Icon name="link" size={14} />
+                </button>
+              </>
+            ) : (
+              <Link className={`btn btn-sm${b.status === 'submitted' ? '' : ' btn-primary'}`} to={`/${client.slug}/${b.slug}`}>
+                {b.status === 'submitted' ? 'Zobacz odpowiedzi' : b.status === 'in_progress' ? 'Dokończ' : 'Wypełnij'}
+              </Link>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+/* ---------- rozmowa ---------- */
+
+function CaseChat({ c, isAdmin }: { c: Case; isAdmin: boolean }) {
+  const toast = useToast()
+  const [list, setList] = useState<CaseMessage[] | null>(null)
+  const [body, setBody] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const load = useCallback(async () => {
+    setList(await listCaseMessages(c.id))
+    markCaseRead(c.id).catch(() => {})
+  }, [c.id])
+  useEffect(() => {
+    load().catch((e) => toast((e as Error).message))
+    const t = window.setInterval(() => load().catch(() => {}), 20000)
+    return () => clearInterval(t)
+  }, [load, toast])
+
+  const send = async () => {
+    if (!body.trim() && !file) return
+    setBusy(true)
+    try {
+      await sendCaseMessage(c, body.trim() || (file ? `Plik: ${file.name}` : ''), isAdmin, file ?? undefined)
+      setBody('')
+      setFile(null)
+      await load()
+    } catch (e) {
+      toast((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const openFile = async (path: string | null, url: string | null) => {
+    if (url) return window.open(url, '_blank', 'noopener')
+    if (!path) return
+    const u = (await signedUrls([path]))[path]
+    if (u) window.open(u, '_blank', 'noopener')
+  }
+
+  return (
+    <section className="card case-sec">
+      <SecHead title="Rozmowa w sprawie" hint="Pytania, komentarze i potwierdzenia dotyczące tylko tej sprawy." />
+      {!list ? (
+        <Spinner />
+      ) : (
+        <div className="chat case-chat">
+          <div className="chat-list">
+            {list.length === 0 && <p className="muted" style={{ textAlign: 'center', padding: 16 }}>Brak wiadomości w tej sprawie.</p>}
+            {list.map((m) => {
+              const mine = m.from_admin === isAdmin
+              return (
+                <div key={m.id} className={`msg${mine ? ' mine' : ''}`}>
+                  <div className="msg-bubble">
+                    {editId === m.id ? (
+                      <div className="stack">
+                        <textarea className="textarea" value={editText} onChange={(e) => setEditText(e.target.value)} />
+                        <div className="row">
+                          <button className="btn btn-sm" onClick={() => setEditId(null)}>
+                            Anuluj
+                          </button>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            disabled={!editText.trim()}
+                            onClick={async () => {
+                              try {
+                                await editCaseMessage(m.id, editText.trim())
+                                setEditId(null)
+                                await load()
+                              } catch (e) {
+                                toast((e as Error).message)
+                              }
+                            }}
+                          >
+                            Zapisz
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="msg-body">{m.body}</div>
+                    )}
+                    {m.file && (
+                      <button className="msg-file" onClick={() => openFile(m.file!.path, m.file!.url)}>
+                        <Icon name="doc" size={15} /> {m.file.name}
+                      </button>
+                    )}
+                  </div>
+                  <div className="msg-meta">
+                    {m.from_admin ? 'Natalia, NAFU Design' : 'Klient'} · {fmtDate(m.created_at)}
+                    {m.edited_at && ' · edytowana'}
+                    {mine && m.read_at && ' · przeczytane'}
+                    {mine && editId !== m.id && (
+                      <>
+                        {' · '}
+                        <button className="link-btn" onClick={() => { setEditId(m.id); setEditText(m.body) }}>
+                          edytuj
+                        </button>
+                        {' · '}
+                        <button
+                          className="link-btn"
+                          onClick={async () => {
+                            if (!confirm('Usunąć wiadomość?')) return
+                            try {
+                              await deleteCaseMessage(m.id)
+                              await load()
+                            } catch (e) {
+                              toast((e as Error).message)
+                            }
+                          }}
+                        >
+                          usuń
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="chat-input">
+            <textarea
+              className="textarea"
+              placeholder="Napisz w tej sprawie…"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send()
+              }}
+            />
+            <div className="row">
+              <button className="btn btn-sm" onClick={() => fileInput.current?.click()}>
+                <Icon name="plus" size={15} /> {file ? file.name : 'Załącz plik'}
+              </button>
+              {file && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setFile(null)}>
+                  Usuń załącznik
+                </button>
+              )}
+              <span className="spacer" />
+              <button className="btn btn-primary" onClick={send} disabled={busy || (!body.trim() && !file)}>
+                {busy ? 'Wysyłam…' : 'Wyślij'}
+              </button>
+            </div>
+            <input ref={fileInput} type="file" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/* ---------- podsumowanie, akceptacja, zamknięcie ---------- */
+
+function Closing({ c, isAdmin, run }: { c: Case; isAdmin: boolean; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
+  const [summary, setSummary] = useState(c.summary ?? '')
+  useEffect(() => setSummary(c.summary ?? ''), [c.summary])
+
+  return (
+    <section className={`card case-sec case-close case-${c.status}`}>
+      <SecHead title="Podsumowanie i zamknięcie" />
+
+      {c.status === 'open' && isAdmin && (
+        <>
+          <Field label="Podsumowanie dla klienta: co zostało zrobione i co klient akceptuje" value={summary} onChange={setSummary} textarea />
+          <div className="row">
+            <button className="btn btn-ghost btn-sm" onClick={() => confirm('Zamknąć sprawę bez akceptacji klienta?') && run(() => closeCase(c.id), 'Sprawa zamknięta')}>
+              Zamknij bez akceptacji
+            </button>
+            <span className="spacer" />
+            <button className="btn btn-primary btn-sm" disabled={!summary.trim()} onClick={() => run(() => requestAcceptance(c.id, summary.trim()), 'Wysłano do akceptacji')}>
+              Wyślij do akceptacji
+            </button>
+          </div>
+        </>
+      )}
+      {c.status === 'open' && !isAdmin && <p className="muted" style={{ margin: 0 }}>Gdy wszystko będzie gotowe, dostaniesz tu podsumowanie do akceptacji.</p>}
+
+      {c.status !== 'open' && c.summary && <div className="case-summary">{c.summary}</div>}
+
+      {c.status === 'review' && !isAdmin && (
+        <div className="row">
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              const reason = prompt('Co trzeba poprawić przed akceptacją?')
+              if (reason !== null) run(() => returnCase(c.id, reason), 'Przekazano uwagi')
+            }}
+          >
+            Zgłaszam poprawki
+          </button>
+          <span className="spacer" />
+          <button className="btn btn-primary btn-sm" onClick={() => confirm('Akceptujesz podsumowanie i zamykasz sprawę?') && run(() => acceptCase(c.id), 'Dziękuję, sprawa zaakceptowana i zamknięta')}>
+            ✓ Akceptuję i zamykam
+          </button>
+        </div>
+      )}
+      {c.status === 'review' && isAdmin && (
+        <div className="row">
+          <span className="muted" style={{ fontSize: 14 }}>Czeka na akceptację klienta.</span>
+          <span className="spacer" />
+          <button className="btn btn-ghost btn-sm" onClick={() => run(() => returnCase(c.id, ''), 'Cofnięto do toku')}>
+            Cofnij do toku
+          </button>
+          <button className="btn btn-sm" onClick={() => confirm('Zamknąć sprawę bez akceptacji klienta?') && run(() => closeCase(c.id), 'Sprawa zamknięta')}>
+            Zamknij
+          </button>
+        </div>
+      )}
+
+      {c.status === 'closed' && (
+        <div className="row">
+          <span className="muted" style={{ fontSize: 14 }}>
+            {c.accepted_at ? `Zaakceptowana i zamknięta ${fmtDate(c.accepted_at)}` : `Zamknięta ${fmtDate(c.closed_at)}`}
+          </span>
+          <span className="spacer" />
+          {isAdmin && (
+            <button className="btn btn-sm" onClick={() => run(() => reopenCase(c.id), 'Sprawa otwarta ponownie')}>
+              Otwórz ponownie
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function EditCase({ c, isAdmin, onClose, onSave }: { c: Case; isAdmin: boolean; onClose: () => void; onSave: (patch: Partial<Case>) => Promise<void> }) {
+  const [title, setTitle] = useState(c.title)
+  const [description, setDescription] = useState(c.description ?? '')
+  const [due, setDue] = useState(c.due_date ?? '')
+  return (
+    <Modal label="Edytuj sprawę" onClose={onClose}>
+      <div className="eyebrow">Sprawy bieżące</div>
+      <h2 style={{ marginTop: 8, marginBottom: 14 }}>Edytuj sprawę</h2>
+      <div className="stack">
+        <Field label="Temat" value={title} onChange={setTitle} />
+        <Field label="Opis" value={description} onChange={setDescription} textarea />
+        {isAdmin && <Field label="Termin" type="date" value={due} onChange={setDue} />}
+      </div>
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Anuluj
+        </button>
+        <button
+          className="btn btn-primary"
+          disabled={!title.trim()}
+          onClick={() => onSave({ title: title.trim(), description: description.trim() || null, ...(isAdmin ? { due_date: due || null } : {}) })}
+        >
+          Zapisz
+        </button>
+      </div>
+    </Modal>
+  )
+}

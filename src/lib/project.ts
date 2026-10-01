@@ -67,6 +67,8 @@ export interface Task {
   assignee: 'client' | 'nafu'
   /** czy klient widzi zadanie */
   visible: boolean
+  /** sprawa bieżąca, do której należy zadanie */
+  case_id?: string | null
   created_at: string
 }
 export async function listTasks(clientId: string): Promise<Task[]> {
@@ -203,6 +205,8 @@ export interface AccessItem {
   position: number
   created_by: 'admin' | 'client'
   secret_id: string | null
+  /** sprawa bieżąca, do której należy pozycja */
+  case_id?: string | null
   created_at: string
 }
 export interface Credentials {
@@ -276,10 +280,11 @@ export async function updateAccess(id: string, patch: Partial<Pick<AccessItem, '
 export async function deleteAccess(id: string) {
   must(await sb().from('access_items').delete().eq('id', id))
 }
-export async function addAccessFromCatalog(clientId: string, keys: string[], existing: AccessItem[]) {
+export async function addAccessFromCatalog(clientId: string, keys: string[], existing: AccessItem[], caseId?: string) {
   const have = new Set(existing.map((e) => e.service))
   const rows = ACCESS_CATALOG.filter((c) => keys.includes(c.key) && !have.has(c.key)).map((c, i) => ({
     client_id: clientId, service: c.key, title: c.title, kind: c.kind, description: c.description, position: existing.length + i,
+    ...(caseId ? { case_id: caseId } : {}),
   }))
   if (rows.length) must(await sb().from('access_items').insert(rows))
 }
@@ -307,6 +312,8 @@ export interface ClientDocument {
   content: string | null
   kind: string
   visible: boolean
+  /** sprawa bieżąca, do której należy dokument */
+  case_id?: string | null
   requires_acceptance: boolean
   accepted_at: string | null
   created_at: string
@@ -320,13 +327,16 @@ export async function addDocument(
   clientId: string,
   title: string,
   file: File,
-  opts: { requiresAcceptance: boolean; visible: boolean; note?: string },
+  opts: { requiresAcceptance: boolean; visible: boolean; note?: string; caseId?: string },
 ) {
   const f = await uploadFile(clientId, file, { kind: 'document' })
   must(
     await sb()
       .from('client_documents')
-      .insert({ client_id: clientId, title, file_id: f.id, requires_acceptance: opts.requiresAcceptance, visible: opts.visible, note: opts.note || null }),
+      .insert({
+        client_id: clientId, title, file_id: f.id, requires_acceptance: opts.requiresAcceptance, visible: opts.visible, note: opts.note || null,
+        ...(opts.caseId ? { case_id: opts.caseId } : {}),
+      }),
   )
 }
 /** Administratorka: notatki wewnętrzne do dokumentów klienta */
