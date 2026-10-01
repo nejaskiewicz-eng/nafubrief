@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../components/ui'
 import { api } from '../lib/api'
+import { renderMarkdown } from '../lib/markdown'
 import {
   CASE_BADGE, CASE_STATUS, PRIORITY_LABEL, SECTIONS, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
@@ -166,6 +167,8 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   const [items, setItems] = useState<CaseItems | null>(null)
   const [editing, setEditing] = useState(false)
   const [inviting, setInviting] = useState(false)
+  // opis sprawy edytowany w miejscu, w dużym polu (wprowadzenie do sprawy bywa długie)
+  const [descDraft, setDescDraft] = useState<string | null>(null)
   const canEditCase = isAdmin || (c.created_by === 'client' && c.status === 'open')
   const locked = c.status === 'closed'
 
@@ -239,7 +242,36 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
           <span>założona {fmtDate(c.created_at)}</span>
         </div>
         <h2>{c.title}</h2>
-        {c.description && <p className="case-desc">{c.description}</p>}
+        {descDraft !== null ? (
+          <div className="case-desc-edit">
+            <textarea className="textarea" value={descDraft} onChange={(e) => setDescDraft(e.target.value)} autoFocus />
+            <div className="row">
+              <span className="muted" style={{ fontSize: 13 }}>Formatowanie: ## nagłówek, **pogrubienie**, lista od myślnika. Pusty wiersz zaczyna nowy akapit.</span>
+              <span className="spacer" />
+              <button className="btn btn-sm" onClick={() => setDescDraft(null)}>
+                Anuluj
+              </button>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={async () => {
+                  await run(() => updateCase(c.id, { description: descDraft.trim() || null }), 'Zapisano opis')
+                  setDescDraft(null)
+                }}
+              >
+                Zapisz
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {c.description && <div className="case-desc md" dangerouslySetInnerHTML={{ __html: renderMarkdown(c.description, { breaks: true }) }} />}
+            {canEditCase && !locked && (
+              <button className="btn btn-ghost btn-sm case-desc-btn" onClick={() => setDescDraft(c.description ?? '')}>
+                <Icon name="edit" size={14} /> {c.description ? 'Edytuj opis' : 'Dodaj opis'}
+              </button>
+            )}
+          </>
+        )}
       </section>
 
       {!items ? (

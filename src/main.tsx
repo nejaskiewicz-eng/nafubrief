@@ -18,6 +18,17 @@ const BriefEditor = lazy(() => import('./pages/admin/BriefEditor'))
 const Templates = lazy(() => import('./pages/admin/Templates'))
 const S = (el: ReactNode) => <Suspense fallback={<Loading />}>{el}</Suspense>
 
+// Po wdrożeniu nowej wersji otwarta karta może prosić o plik, którego już nie ma na serwerze.
+// Zamiast ekranu błędu odświeżamy stronę, najwyżej raz na 30 sekund, żeby nie wpaść w pętlę.
+window.addEventListener('vite:preloadError', (e) => {
+  const KEY = 'nafu-reload-after-deploy'
+  const last = Number(sessionStorage.getItem(KEY) || 0)
+  if (Date.now() - last < 30_000) return
+  sessionStorage.setItem(KEY, String(Date.now()))
+  e.preventDefault()
+  window.location.reload()
+})
+
 const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/panel" replace /> },
   { path: '/login', element: <Login /> },

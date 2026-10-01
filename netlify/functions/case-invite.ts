@@ -11,6 +11,10 @@ const json = (statusCode: number, body: unknown) => ({
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const fmtDay = (d: string) => new Date(d).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })
 
+/** Do e-maila trafia tylko pierwszy akapit opisu sprawy, bez znaków formatowania. Pełny opis jest w panelu, po zalogowaniu. */
+const lead = (d: string | null) =>
+  (d ?? '').split(/\n\s*\n/)[0].replace(/^#+\s*/gm, '').replace(/\*\*/g, '').trim() || null
+
 type CaseRow = { id: string; title: string; description: string | null; due_date: string | null; status: string; priority: string; client_id: string }
 type ClientRow = { slug: string; name: string; company: string | null; email: string | null; login_email: string | null; address_form: string | null; salutation: string | null }
 
@@ -56,7 +60,7 @@ export const handler: Handler = async (event) => {
   const site = (process.env.VITE_SITE_URL || process.env.URL || '').replace(/\/$/, '')
   const link = `${site}/${cl.slug}/sprawy?sprawa=${c.id}`
   const { subject, html, text } = renderCaseInvite({
-    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: c.description, due: c.due_date, note, login: clientTo, link, site,
+    form: cl.address_form, salutation: cl.salutation, priority: c.priority, title: c.title, description: lead(c.description), due: c.due_date, note, login: clientTo, link, site,
   })
 
   const res = await fetch('https://api.resend.com/emails', {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Icon, Modal, Spinner, copyText, fmtDate, useToast } from '../components/ui'
 import { renderMarkdown } from '../lib/markdown'
-import { acceptDocument, addDocument, deleteDocument, deleteDocumentNote, listDocumentNotes, listDocuments, saveDocumentNote, updateDocument, type ClientDocument } from '../lib/project'
+import { CLIENT_DOC_KINDS, DOC_KINDS, acceptDocument, addDocument, deleteDocument, deleteDocumentNote, docKind, docKindLabel, listDocumentNotes, listDocuments, saveDocumentNote, updateDocument, type ClientDocument, type DocKind } from '../lib/project'
 import type { Client } from '../lib/types'
 import { signedUrls } from '../lib/workspace'
 import { Empty, Field, Toggle } from './bits'
@@ -24,6 +24,7 @@ export default function Documents({
   const [docs, setDocs] = useState<ClientDocument[] | null>(null)
   const [adding, setAdding] = useState(false)
   const [reading, setReading] = useState<ClientDocument | null>(null)
+  const [cat, setCat] = useState<DocKind | 'all'>('all')
 
   const load = useCallback(async () => {
     const all = await listDocuments(client.id)
@@ -64,12 +65,20 @@ export default function Documents({
   // w sprawie dokumenty dodają obie strony; rozdzielamy je na dodane przez pracownię i przez klienta
   const bothSides = !!caseId && only !== 'contract'
   const clientCanAdd = bothSides && !isAdmin && !locked
+  // kategorie: poziome menu nad listą (poza osobną sekcją umów w sprawie)
+  const withCats = only !== 'contract'
+  const label = (k: string) => docKindLabel(k, { isAdmin, inCase: !!caseId })
+  const cats = DOC_KINDS.map((k) => ({ key: k, n: docs.filter((d) => docKind(d.kind) === k).length })).filter((c) => c.n > 0)
+  const active = cat !== 'all' && cats.some((c) => c.key === cat) ? cat : 'all'
+  const shown = withCats && active !== 'all' ? docs.filter((d) => docKind(d.kind) === active) : docs
+  // kategorie do wyboru przy dodawaniu i zmianie
+  const pickable: DocKind[] = isAdmin ? DOC_KINDS.filter((k) => (caseId ? k !== 'contract' : true)) : CLIENT_DOC_KINDS
   const groups = bothSides
     ? [
-        { key: 'studio', title: isAdmin ? 'Dodane przeze mnie' : 'Od Natalii', list: docs.filter((d) => d.from_admin !== false) },
-        { key: 'client', title: isAdmin ? 'Dodane przez klienta' : 'Dodane przez Ciebie', list: docs.filter((d) => d.from_admin === false) },
+        { key: 'studio', title: isAdmin ? 'Dodane przeze mnie' : 'Od Natalii', list: shown.filter((d) => d.from_admin !== false) },
+        { key: 'client', title: isAdmin ? 'Dodane przez klienta' : 'Dodane przez Ciebie', list: shown.filter((d) => d.from_admin === false) },
       ].filter((g) => g.list.length > 0)
-    : [{ key: 'all', title: '', list: docs }]
+    : [{ key: 'all', title: '', list: shown }]
 
   return (
     <div className="ws">
@@ -90,6 +99,19 @@ export default function Documents({
           <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
             <Icon name="plus" size={15} /> {only === 'contract' ? 'Dodaj umowę' : 'Dodaj dokument'}
           </button>
+        </div>
+      )}
+
+      {withCats && docs.length > 0 && (
+        <div className="doc-cats" role="tablist" aria-label="Kategorie dokumentów">
+          <button role="tab" aria-selected={active === 'all'} className={active === 'all' ? 'on' : ''} onClick={() => setCat('all')}>
+            Wszystkie <span>{docs.length}</span>
+          </button>
+          {cats.map((c) => (
+            <button key={c.key} role="tab" aria-selected={active === c.key} className={active === c.key ? 'on' : ''} onClick={() => setCat(c.key)}>
+              {label(c.key)} <span>{c.n}</span>
+            </button>
+          ))}
         </div>
       )}
 
@@ -132,6 +154,27 @@ export default function Documents({
                   ) : (
                     <span className="badge sent">Do wiadomości</span>
                   )}
+                  {withCats && (isAdmin ? (
+                    <select
+                      className="doc-cat-select"
+                      aria-label="Kategoria dokumentu"
+                      value={docKind(d.kind)}
+                      onChange={async (e) => {
+                        try {
+                          await updateDocument(d.id, { kind: e.target.value })
+                          load()
+                        } catch (err) {
+                          toast((err as Error).message)
+                        }
+                      }}
+                    >
+                      {(pickable.includes(docKind(d.kind)) ? pickable : [docKind(d.kind), ...pickable]).map((k) => (
+                        <option key={k} value={k}>{label(k)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="doc-cat-tag">{label(d.kind)}</span>
+                  ))}
                   <span>dodano {fmtDate(d.created_at)}</span>
                 </div>
                 {isAdmin && fromClient ? (
@@ -238,11 +281,13 @@ export default function Documents({
       {adding && (
         <AddDoc
           asClient={!isAdmin}
+          kinds={only === 'contract' ? undefined : pickable.map((k) => ({ key: k, label: label(k) }))}
+          initialKind={active !== 'all' && pickable.includes(active) ? active : 'other'}
           onClose={() => setAdding(false)}
-          onSave={async (title, file, requires, visible, note) => {
+          onSave={async (title, file, requires, visible, note, kind) => {
             await addDocument(client.id, title, file, isAdmin
-              ? { requiresAcceptance: requires, visible, note, caseId, kind: only === 'contract' ? 'contract' : undefined }
-              : { requiresAcceptance: false, visible: true, note, caseId })
+              ? { requiresAcceptance: requires, visible, note, caseId, kind: only === 'contract' ? 'contract' : kind }
+              : { requiresAcceptance: false, visible: true, note, caseId, kind })
             setAdding(false)
             if (!isAdmin) toast('Dodano dokument')
             load()
@@ -267,13 +312,14 @@ export default function Documents({
   )
 }
 
-function AddDoc({ onClose, onSave, asClient }: { onClose: () => void; onSave: (title: string, file: File, requires: boolean, visible: boolean, note: string) => Promise<void>; asClient?: boolean }) {
+function AddDoc({ onClose, onSave, asClient, kinds, initialKind }: { onClose: () => void; onSave: (title: string, file: File, requires: boolean, visible: boolean, note: string, kind?: string) => Promise<void>; asClient?: boolean; kinds?: Array<{ key: string; label: string }>; initialKind?: string }) {
   const toast = useToast()
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [requires, setRequires] = useState(true)
   const [visible, setVisible] = useState(true)
+  const [kind, setKind] = useState(initialKind ?? 'other')
   const [busy, setBusy] = useState(false)
   return (
     <Modal label="Dodaj dokument" onClose={onClose}>
@@ -289,6 +335,16 @@ function AddDoc({ onClose, onSave, asClient }: { onClose: () => void; onSave: (t
             if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, ''))
           }} />
         </label>
+        {kinds && (
+          <label className="field">
+            <span className="label">Kategoria</span>
+            <select className="select" value={kind} onChange={(e) => setKind(e.target.value)}>
+              {kinds.map((k) => (
+                <option key={k.key} value={k.key}>{k.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <Field label={asClient ? 'Opis (opcjonalnie)' : 'Opis dla klienta (opcjonalnie)'} value={note} onChange={setNote} textarea />
         {!asClient && <Toggle checked={requires} onChange={setRequires} label="Wymaga akceptacji klienta" />}
         {!asClient && <Toggle checked={visible} onChange={setVisible} label="Od razu widoczny dla klienta (wyłącz, żeby zapisać jako szkic)" />}
@@ -301,7 +357,7 @@ function AddDoc({ onClose, onSave, asClient }: { onClose: () => void; onSave: (t
           if (!title.trim() || !file) return toast('Podaj nazwę i wybierz plik.')
           setBusy(true)
           try {
-            await onSave(title.trim(), file, requires, visible, note.trim())
+            await onSave(title.trim(), file, requires, visible, note.trim(), kinds ? kind : undefined)
           } catch (e) {
             toast((e as Error).message)
             setBusy(false)

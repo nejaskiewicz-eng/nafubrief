@@ -322,6 +322,25 @@ export interface ClientDocument {
   updated_at: string
   file?: ClientFile | null
 }
+/** Kategorie dokumentów (pole kind). Kolejność = kolejność w menu kategorii. */
+export const DOC_KINDS = ['contract', 'agreement', 'legal', 'report', 'invoice', 'mail', 'evidence', 'other'] as const
+export type DocKind = (typeof DOC_KINDS)[number]
+/** kategorie, które może wybrać klient, dodając własny dokument do sprawy */
+export const CLIENT_DOC_KINDS: DocKind[] = ['agreement', 'invoice', 'mail', 'evidence', 'other']
+export const docKind = (k: string): DocKind => ((DOC_KINDS as readonly string[]).includes(k) ? (k as DocKind) : 'other')
+/** Nazwa kategorii. W sprawie umowy z pracownią mają własną sekcję, więc „Umowy” oznaczają tam umowy z innymi firmami. */
+export function docKindLabel(k: string, opts: { isAdmin: boolean; inCase: boolean }): string {
+  switch (docKind(k)) {
+    case 'contract': return opts.isAdmin ? 'Umowy z klientem' : 'Umowy z Natalią'
+    case 'agreement': return opts.inCase ? 'Umowy' : 'Umowy z innymi firmami'
+    case 'legal': return 'Dokumenty prawne'
+    case 'report': return 'Raporty i opracowania'
+    case 'invoice': return 'Faktury i rozliczenia'
+    case 'mail': return 'Korespondencja'
+    case 'evidence': return 'Dowody'
+    default: return 'Inne'
+  }
+}
 export async function listDocuments(clientId: string): Promise<ClientDocument[]> {
   return must(await sb().from('client_documents').select('*, file:client_files(*)').eq('client_id', clientId).order('created_at', { ascending: false }))
 }
