@@ -3,13 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import {
-  CASE_BADGE, CASE_STATUS, PRIORITY_LABEL, acceptCase, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
+  CASE_BADGE, CASE_STATUS, PRIORITY_LABEL, SECTIONS, acceptCase, addCaseFile, addCaseLink, deleteTip, listCaseMedia, listTips, saveTip, toggleTip, addCaseBrief, caseUnread, inviteToCase, closeCase, createCase, deleteCase, deleteCaseMessage, editCaseMessage,
   linkItem, listCaseItems, listCaseMessages, listCases, markCaseRead, reopenCase, requestAcceptance, returnCase, sendCaseMessage, updateCase,
-  type Case, type CaseItems, type CaseMessage, type CasePriority,
+  type Case, type CaseItems, type CaseMessage, type CasePriority, type CaseSection, type CaseTip,
 } from '../lib/cases'
-import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateTask, type Task } from '../lib/project'
+import { addTask, deleteTask, listAccess, listDocuments, listTasks, toggleTask, updateDocument, updateTask, type Task } from '../lib/project'
 import type { Brief, Client } from '../lib/types'
-import { signedUrls } from '../lib/workspace'
+import { deleteFile, fmtSize, signedUrls, type ClientFile } from '../lib/workspace'
 import Access from './Access'
 import { Empty, Field, Toggle } from './bits'
 import Documents from './Documents'
@@ -167,6 +167,7 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   const [editing, setEditing] = useState(false)
   const [inviting, setInviting] = useState(false)
   const canEditCase = isAdmin || (c.created_by === 'client' && c.status === 'open')
+  const on = (k: CaseSection) => (c.sections ?? []).includes(k)
   const locked = c.status === 'closed'
 
   const loadItems = useCallback(async () => {
@@ -214,6 +215,8 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         </div>
       </div>
 
+      {isAdmin && <SectionsPicker c={c} run={run} />}
+
       {isAdmin && !locked && (
         <div className="case-invite">
           <div>
@@ -244,35 +247,55 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         <Spinner />
       ) : (
         <>
-          <TasksBlock client={client} c={c} tasks={items.tasks} isAdmin={isAdmin} locked={locked} run={run} />
-          <BriefsBlock client={client} c={c} briefs={items.briefs} isAdmin={isAdmin} locked={locked} run={run} />
+          {on('tasks') && <TasksBlock client={client} c={c} tasks={items.tasks} isAdmin={isAdmin} locked={locked} run={run} />}
+          {on('tips') && <TipsBlock c={c} isAdmin={isAdmin} locked={locked} />}
+          {on('briefs') && <BriefsBlock client={client} c={c} briefs={items.briefs} isAdmin={isAdmin} locked={locked} run={run} />}
 
-          <section className="card case-sec">
-            <SecHead title="Dokumenty" hint={isAdmin ? 'Szkice są widoczne tylko dla Ciebie, dopóki ich nie udostępnisz.' : 'Przeczytaj i zaakceptuj dokumenty przygotowane w tej sprawie.'} />
-            {isAdmin && !locked && (
-              <LinkExisting
-                label="Podepnij dokument"
-                load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
-                onPick={(id) => run(() => linkItem('client_documents', id, c.id), 'Podpięto dokument')}
-              />
-            )}
-            <Documents client={client} isAdmin={isAdmin} caseId={c.id} key={`d-${items.documents.length}`} />
-          </section>
+          {on('contracts') && (
+            <section className="card case-sec">
+              <SecHead title="Umowy" hint={isAdmin ? 'Umowy w tej sprawie. Szkic widzisz tylko Ty, dopóki go nie udostępnisz.' : 'Przeczytaj i zaakceptuj umowy w tej sprawie.'} />
+              {isAdmin && !locked && (
+                <LinkExisting
+                  label="Podepnij umowę"
+                  load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
+                  onPick={(id) => run(async () => { await linkItem('client_documents', id, c.id); await updateDocument(id, { kind: 'contract' }) }, 'Podpięto umowę')}
+                />
+              )}
+              <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="contract" key={`k-${items.documents.length}`} />
+            </section>
+          )}
 
-          <section className="card case-sec">
-            <SecHead title="Dostępy" hint={isAdmin ? 'Dopisz, do czego potrzebujesz dostępu w tej sprawie.' : 'Tu udzielasz dostępów potrzebnych w tej sprawie.'} />
-            {isAdmin && !locked && (
-              <LinkExisting
-                label="Podepnij dostęp z listy"
-                load={async () => (await listAccess(client.id)).filter((a) => !a.case_id).map((a) => ({ id: a.id, label: a.title }))}
-                onPick={(id) => run(() => linkItem('access_items', id, c.id), 'Podpięto dostęp')}
-              />
-            )}
-            <Access clientId={client.id} isAdmin={isAdmin} caseId={c.id} key={`a-${items.access.length}`} />
-          </section>
+          {on('documents') && (
+            <section className="card case-sec">
+              <SecHead title="Dokumenty" hint={isAdmin ? 'Szkice są widoczne tylko dla Ciebie, dopóki ich nie udostępnisz.' : 'Przeczytaj i zaakceptuj dokumenty przygotowane w tej sprawie.'} />
+              {isAdmin && !locked && (
+                <LinkExisting
+                  label="Podepnij dokument"
+                  load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
+                  onPick={(id) => run(() => linkItem('client_documents', id, c.id), 'Podpięto dokument')}
+                />
+              )}
+              <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="other" key={`d-${items.documents.length}`} />
+            </section>
+          )}
 
-          <CaseChat c={c} isAdmin={isAdmin} />
-          <Closing c={c} isAdmin={isAdmin} run={run} />
+          {on('access') && (
+            <section className="card case-sec">
+              <SecHead title="Dostępy" hint={isAdmin ? 'Dopisz, do czego potrzebujesz dostępu w tej sprawie.' : 'Tu udzielasz dostępów potrzebnych w tej sprawie.'} />
+              {isAdmin && !locked && (
+                <LinkExisting
+                  label="Podepnij dostęp z listy"
+                  load={async () => (await listAccess(client.id)).filter((a) => !a.case_id).map((a) => ({ id: a.id, label: a.title }))}
+                  onPick={(id) => run(() => linkItem('access_items', id, c.id), 'Podpięto dostęp')}
+                />
+              )}
+              <Access clientId={client.id} isAdmin={isAdmin} caseId={c.id} key={`a-${items.access.length}`} />
+            </section>
+          )}
+
+          {on('media') && <MediaBlock c={c} isAdmin={isAdmin} locked={locked} />}
+          {on('chat') && <CaseChat c={c} isAdmin={isAdmin} />}
+          {on('closing') && <Closing c={c} isAdmin={isAdmin} run={run} />}
         </>
       )}
 
@@ -895,5 +918,261 @@ function PriorityPick({ value, onChange }: { value: CasePriority; onChange: (v: 
         ))}
       </div>
     </div>
+  )
+}
+
+/* ---------- wybór sekcji sprawy ---------- */
+
+function SectionsPicker({ c, run }: { c: Case; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const active = c.sections ?? []
+  const toggle = (k: CaseSection) => {
+    const next = active.includes(k) ? active.filter((x) => x !== k) : [...active, k]
+    run(() => updateCase(c.id, { sections: SECTIONS.map((s) => s.key).filter((x) => next.includes(x)) }))
+  }
+  return (
+    <div className={`case-sections${open ? ' is-open' : ''}`}>
+      <button className="case-sections-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span>
+          <strong>Sekcje w tej sprawie</strong>
+          <span className="muted"> · {SECTIONS.filter((s) => active.includes(s.key)).map((s) => s.label).join(', ') || 'brak'}</span>
+        </span>
+        <Icon name={open ? 'up' : 'down'} size={16} />
+      </button>
+      {open && (
+        <div className="case-sections-list">
+          {SECTIONS.map((s) => (
+            <label key={s.key} className="case-sections-item">
+              <input type="checkbox" checked={active.includes(s.key)} onChange={() => toggle(s.key)} />
+              <span>
+                <strong>{s.label}</strong>
+                <span className="muted"> - {s.hint}</span>
+              </span>
+            </label>
+          ))}
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Klient widzi tylko włączone sekcje. Wyłączenie sekcji niczego nie usuwa.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ---------- zalecenia i porady ---------- */
+
+function TipsBlock({ c, isAdmin, locked }: { c: Case; isAdmin: boolean; locked: boolean }) {
+  const toast = useToast()
+  const [tips, setTips] = useState<CaseTip[] | null>(null)
+  const [editing, setEditing] = useState<Partial<CaseTip> | null>(null)
+  const load = useCallback(async () => setTips(await listTips(c.id)), [c.id])
+  useEffect(() => {
+    load().catch((e) => toast((e as Error).message))
+  }, [load, toast])
+  const act = async (fn: () => Promise<unknown>, msg?: string) => {
+    try {
+      await fn()
+      if (msg) toast(msg)
+    } catch (e) {
+      toast((e as Error).message)
+    }
+    await load()
+  }
+  if (!tips) return null
+  if (!isAdmin && tips.length === 0) return null
+  return (
+    <section className="card case-sec">
+      <SecHead title="Zalecenia i porady" hint={isAdmin ? 'Co klient powinien zrobić albo wiedzieć. Klient odhacza, co już zrobił.' : 'Moje zalecenia w tej sprawie. Odhacz, co już zrobione.'}>
+        {isAdmin && !locked && (
+          <button className="btn btn-sm" onClick={() => setEditing({ title: '', body: '' })}>
+            <Icon name="plus" size={15} /> Zalecenie
+          </button>
+        )}
+      </SecHead>
+      {tips.length === 0 && <p className="muted" style={{ margin: 0 }}>Brak zaleceń w tej sprawie.</p>}
+      {tips.map((t, i) => (
+        <div key={t.id} className={`case-tip${t.done_at ? ' done' : ''}`}>
+          <button className={`todo-check${t.done_at ? ' on' : ''}`} disabled={locked} aria-label={t.done_at ? 'Oznacz jako niezrobione' : 'Oznacz jako zrobione'} onClick={() => act(() => toggleTip(t.id))}>
+            {t.done_at ? '✓' : ''}
+          </button>
+          <div style={{ minWidth: 0 }}>
+            <strong>
+              {i + 1}. {t.title}
+            </strong>
+            {t.body && <p className="case-tip-body">{t.body}</p>}
+            {t.done_at && <span className="muted" style={{ fontSize: 12.5 }}>zrobione {fmtDate(t.done_at)}</span>}
+          </div>
+          {isAdmin && (
+            <span className="st-item-tools">
+              <button className="btn btn-ghost btn-icon" aria-label="Edytuj zalecenie" onClick={() => setEditing(t)}>
+                <Icon name="edit" size={14} />
+              </button>
+              <button className="btn btn-ghost btn-icon btn-danger" aria-label="Usuń zalecenie" onClick={() => confirm(`Usunąć zalecenie „${t.title}”?`) && act(() => deleteTip(t.id))}>
+                <Icon name="trash" size={14} />
+              </button>
+            </span>
+          )}
+        </div>
+      ))}
+      {editing && (
+        <Modal label="Zalecenie" onClose={() => setEditing(null)}>
+          <div className="eyebrow">Zalecenia i porady</div>
+          <h2 style={{ marginTop: 8, marginBottom: 14 }}>{editing.id ? 'Edytuj zalecenie' : 'Nowe zalecenie'}</h2>
+          <div className="stack">
+            <Field label="Zalecenie" value={editing.title} onChange={(v) => setEditing({ ...editing, title: v })} placeholder="np. Zmień hasło do WordPressa po przekazaniu dostępu" />
+            <Field label="Szczegóły (opcjonalnie)" value={editing.body} onChange={(v) => setEditing({ ...editing, body: v })} textarea />
+          </div>
+          <div className="modal-actions">
+            <button className="btn" onClick={() => setEditing(null)}>
+              Anuluj
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={!editing.title?.trim()}
+              onClick={async () => {
+                await act(
+                  () => saveTip({ id: editing.id, case_id: c.id, client_id: c.client_id, title: editing.title!.trim(), body: editing.body?.trim() || null, ...(editing.id ? {} : { position: tips.length }) }),
+                  'Zapisano',
+                )
+                setEditing(null)
+              }}
+            >
+              Zapisz
+            </button>
+          </div>
+        </Modal>
+      )}
+    </section>
+  )
+}
+
+/* ---------- zdjęcia, wideo i linki ---------- */
+
+function MediaBlock({ c, isAdmin, locked }: { c: Case; isAdmin: boolean; locked: boolean }) {
+  const toast = useToast()
+  const [files, setFiles] = useState<ClientFile[] | null>(null)
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  const [linking, setLinking] = useState(false)
+  const [linkName, setLinkName] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+
+  const load = useCallback(async () => {
+    const list = await listCaseMedia(c.id)
+    setFiles(list)
+    setUrls(await signedUrls(list.map((f) => f.path ?? '').filter(Boolean)))
+  }, [c.id])
+  useEffect(() => {
+    load().catch((e) => toast((e as Error).message))
+  }, [load, toast])
+
+  const upload = async (list: FileList | null) => {
+    if (!list?.length) return
+    setBusy(true)
+    try {
+      for (const f of Array.from(list)) await addCaseFile(c, f)
+      toast(list.length > 1 ? `Dodano ${list.length} pliki` : 'Dodano plik')
+      await load()
+    } catch (e) {
+      toast((e as Error).message)
+    } finally {
+      setBusy(false)
+      if (input.current) input.current.value = ''
+    }
+  }
+
+  if (!files) return null
+  return (
+    <section className="card case-sec">
+      <SecHead title="Zdjęcia, wideo i linki" hint={isAdmin ? 'Materiały wizualne i linki istotne dla tej sprawy. Klient też może dodawać.' : 'Dodaj zdjęcia, nagrania albo linki, które pomogą w tej sprawie.'}>
+        {!locked && (
+          <>
+            <button className="btn btn-sm" disabled={busy} onClick={() => input.current?.click()}>
+              <Icon name="plus" size={15} /> {busy ? 'Wysyłam…' : 'Zdjęcie lub wideo'}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setLinking(!linking)}>
+              <Icon name="link" size={15} /> Link
+            </button>
+          </>
+        )}
+      </SecHead>
+      <input ref={input} type="file" hidden multiple accept="image/*,video/*" onChange={(e) => upload(e.target.files)} />
+
+      {linking && (
+        <div className="case-form">
+          <Field label="Nazwa" value={linkName} onChange={setLinkName} placeholder="np. Nagranie z salonu (Dysk Google)" />
+          <Field label="Adres" value={linkUrl} onChange={setLinkUrl} placeholder="https://" />
+          <div className="row">
+            <span className="spacer" />
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!linkName.trim() || !/^https?:\/\//.test(linkUrl.trim())}
+              onClick={async () => {
+                try {
+                  await addCaseLink(c, linkName.trim(), linkUrl.trim())
+                  setLinkName('')
+                  setLinkUrl('')
+                  setLinking(false)
+                  await load()
+                } catch (e) {
+                  toast((e as Error).message)
+                }
+              }}
+            >
+              Dodaj link
+            </button>
+          </div>
+        </div>
+      )}
+
+      {files.length === 0 && !linking && <p className="muted" style={{ margin: 0 }}>Brak materiałów w tej sprawie.</p>}
+      <div className="case-media">
+        {files.map((f) => {
+          const src = f.path ? urls[f.path] : null
+          const isImg = f.mime?.startsWith('image/')
+          const isVid = f.mime?.startsWith('video/')
+          return (
+            <figure key={f.id} className="case-media-item">
+              {f.url ? (
+                <a className="case-media-link" href={f.url} target="_blank" rel="noopener">
+                  <Icon name="link" size={22} />
+                  <span>{f.name}</span>
+                </a>
+              ) : isImg && src ? (
+                <a href={src} target="_blank" rel="noopener">
+                  <img src={src} alt={f.name} loading="lazy" />
+                </a>
+              ) : isVid && src ? (
+                <video src={src} controls preload="metadata" />
+              ) : (
+                <a className="case-media-link" href={src ?? '#'} target="_blank" rel="noopener">
+                  <Icon name="doc" size={22} />
+                  <span>{f.name}</span>
+                </a>
+              )}
+              <figcaption>
+                <span title={f.name}>{f.name}</span>
+                <span className="muted">{f.size ? fmtSize(f.size) : ''}</span>
+                {(isAdmin || !locked) && (
+                  <button
+                    className="link-btn"
+                    onClick={async () => {
+                      if (!confirm(`Usunąć „${f.name}”?`)) return
+                      try {
+                        await deleteFile(f)
+                        await load()
+                      } catch (e) {
+                        toast((e as Error).message)
+                      }
+                    }}
+                  >
+                    usuń
+                  </button>
+                )}
+              </figcaption>
+            </figure>
+          )
+        })}
+      </div>
+    </section>
   )
 }

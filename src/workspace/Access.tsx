@@ -140,7 +140,7 @@ function AccessCard({
   return (
     <section className={`card acc${item.urgent && item.status === 'todo' ? ' acc-urgent' : ''}`}>
       <button className="acc-head" onClick={onToggle} aria-expanded={open}>
-        <span className={`acc-dot acc-${item.status}`}>{item.status === 'done' ? '✓' : item.status === 'na' ? '–' : ''}</span>
+        <span className={`acc-dot acc-${item.status}`}>{item.status === 'done' ? '✓' : item.status === 'na' ? '-' : ''}</span>
         <span className="acc-title">
           <strong>{item.title}</strong>
           <span className="acc-badges">

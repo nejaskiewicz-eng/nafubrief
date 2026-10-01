@@ -70,7 +70,7 @@ Na podstawie odpowiedzi przygotuj tylko te, które dotyczą klienta:
 
 - Po polsku, prostym językiem zrozumiałym dla klienta firmy, bez zbędnego żargonu.
 - Tylko prawdziwe dane z ankiety i profilu. Brakujące dane oznacz jako `[DO UZUPEŁNIENIA: …]`, niczego nie wymyślaj.
-- Nie używaj długich myślników (— ani –), tylko krótki `-`.
+- Nie używaj długich myślników (znaki U+2014 i U+2013), tylko krótki `-`.
 - Format: Markdown z nagłówkami `##` i numerowanymi paragrafami.
 - Na górze każdego dokumentu: nazwa, dane administratora, data „Obowiązuje od: [DO UZUPEŁNIENIA]”.
 

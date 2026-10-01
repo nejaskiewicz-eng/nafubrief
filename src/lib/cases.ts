@@ -3,7 +3,7 @@
 // Klient może zaakceptować sprawę; zamyka ją zawsze administratorka, z podsumowaniem dla klienta.
 import { supabase } from './supabase'
 import type { Brief } from './types'
-import { uploadFile, type ClientFile } from './workspace'
+import { addLink, uploadFile, type ClientFile } from './workspace'
 import type { AccessItem, ClientDocument, Task } from './project'
 
 const sb = () => {
@@ -17,6 +17,19 @@ function must<T>(res: { data: T | null; error: { message: string } | null }): T 
 
 export type CaseStatus = 'open' | 'review' | 'accepted' | 'closed'
 export type CasePriority = 'normal' | 'urgent' | 'very_urgent'
+/** Sekcje, które można włączyć w sprawie (kolejność = kolejność w widoku sprawy) */
+export type CaseSection = 'tasks' | 'tips' | 'briefs' | 'contracts' | 'documents' | 'access' | 'media' | 'chat' | 'closing'
+export const SECTIONS: Array<{ key: CaseSection; label: string; hint: string }> = [
+  { key: 'tasks', label: 'Zadania', hint: 'zadania z terminem dla klienta i dla Ciebie' },
+  { key: 'tips', label: 'Zalecenia i porady', hint: 'co klient powinien zrobić lub wiedzieć' },
+  { key: 'briefs', label: 'Ankiety i pytania', hint: 'pytania w formie ankiety' },
+  { key: 'contracts', label: 'Umowy', hint: 'umowy do przeczytania i akceptacji' },
+  { key: 'documents', label: 'Dokumenty', hint: 'dokumenty do przeczytania i akceptacji' },
+  { key: 'access', label: 'Dostępy', hint: 'dostępy, które klient przekazuje' },
+  { key: 'media', label: 'Zdjęcia, wideo i linki', hint: 'materiały wizualne i linki istotne dla sprawy' },
+  { key: 'chat', label: 'Rozmowa', hint: 'wiadomości tylko w tej sprawie' },
+  { key: 'closing', label: 'Akceptacja i zamknięcie', hint: 'prośba o akceptację, podsumowanie, zamknięcie' },
+]
 export const PRIORITY_LABEL: Record<CasePriority, string> = { normal: 'Zwykła', urgent: 'Pilne', very_urgent: 'Bardzo pilne' }
 export interface Case {
   id: string
@@ -26,6 +39,8 @@ export interface Case {
   status: CaseStatus
   /** kategoria pilności */
   priority: CasePriority
+  /** włączone sekcje */
+  sections: CaseSection[]
   created_by: 'admin' | 'client'
   author_id: string
   due_date: string | null
@@ -64,7 +79,7 @@ export async function listCases(clientId: string): Promise<Case[]> {
 export async function createCase(c: { client_id: string; title: string; description?: string | null; due_date?: string | null; priority?: CasePriority; created_by: 'admin' | 'client' }): Promise<Case> {
   return must(await sb().from('cases').insert(c).select().single())
 }
-export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'priority' | 'summary' | 'status' | 'closed_at' | 'accepted_at'>>) {
+export async function updateCase(id: string, patch: Partial<Pick<Case, 'title' | 'description' | 'due_date' | 'priority' | 'sections' | 'summary' | 'status' | 'closed_at' | 'accepted_at'>>) {
   must(await sb().from('cases').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))
 }
 export async function deleteCase(id: string) {
@@ -169,4 +184,45 @@ export async function inviteToCase(caseId: string, note: string, test = false): 
   const out = (await res.json().catch(() => ({}))) as { error?: string; to?: string }
   if (!res.ok) throw new Error(out.error ?? `Błąd ${res.status}`)
   return out.to ?? ''
+}
+
+/* ---------- zalecenia i porady ---------- */
+
+export interface CaseTip {
+  id: string
+  case_id: string
+  client_id: string
+  title: string
+  body: string | null
+  done_at: string | null
+  position: number
+  created_at: string
+}
+export async function listTips(caseId: string): Promise<CaseTip[]> {
+  return must(await sb().from('case_tips').select('*').eq('case_id', caseId).order('position').order('created_at'))
+}
+export async function saveTip(t: Partial<CaseTip> & { case_id: string; client_id: string; title: string }) {
+  const { id, ...rest } = t
+  if (id) return must(await sb().from('case_tips').update({ ...rest, updated_at: new Date().toISOString() }).eq('id', id))
+  return must(await sb().from('case_tips').insert(rest))
+}
+export async function deleteTip(id: string) {
+  must(await sb().from('case_tips').delete().eq('id', id))
+}
+export async function toggleTip(id: string) {
+  must(await sb().rpc('toggle_case_tip', { p_tip: id }))
+}
+
+/* ---------- zdjęcia, wideo i linki w sprawie ---------- */
+
+export async function listCaseMedia(caseId: string): Promise<ClientFile[]> {
+  return must(await sb().from('client_files').select('*').eq('case_id', caseId).order('created_at', { ascending: false }))
+}
+export async function addCaseFile(c: Case, file: File, note?: string) {
+  const f = await uploadFile(c.client_id, file, { kind: 'case', note })
+  must(await sb().from('client_files').update({ case_id: c.id }).eq('id', f.id))
+}
+export async function addCaseLink(c: Case, name: string, url: string, note?: string) {
+  const f = await addLink(c.client_id, name, url, undefined, note)
+  must(await sb().from('client_files').update({ case_id: c.id, kind: 'case' }).eq('id', f.id))
 }

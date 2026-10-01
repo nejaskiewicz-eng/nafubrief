@@ -69,7 +69,7 @@ export async function saveProfile(clientId: string, data: ProfileData) {
 
 /* ---------- pliki ---------- */
 
-export type FileKind = 'media' | 'team' | 'certificate' | 'message' | 'concept' | 'review' | 'document'
+export type FileKind = 'media' | 'team' | 'certificate' | 'message' | 'concept' | 'review' | 'document' | 'case'
 export interface ClientFile {
   id: string
   client_id: string

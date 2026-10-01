@@ -327,7 +327,7 @@ export async function addDocument(
   clientId: string,
   title: string,
   file: File,
-  opts: { requiresAcceptance: boolean; visible: boolean; note?: string; caseId?: string },
+  opts: { requiresAcceptance: boolean; visible: boolean; note?: string; caseId?: string; kind?: string },
 ) {
   const f = await uploadFile(clientId, file, { kind: 'document' })
   must(
@@ -336,6 +336,7 @@ export async function addDocument(
       .insert({
         client_id: clientId, title, file_id: f.id, requires_acceptance: opts.requiresAcceptance, visible: opts.visible, note: opts.note || null,
         ...(opts.caseId ? { case_id: opts.caseId } : {}),
+        ...(opts.kind ? { kind: opts.kind } : {}),
       }),
   )
 }
@@ -344,7 +345,18 @@ export async function listDocumentNotes(clientId: string): Promise<Record<string
   const { data } = await sb().from('document_notes').select('document_id, body').eq('client_id', clientId)
   return Object.fromEntries((data ?? []).map((n: { document_id: string; body: string }) => [n.document_id, n.body]))
 }
-export async function updateDocument(id: string, patch: Partial<Pick<ClientDocument, 'title' | 'note' | 'content' | 'visible' | 'requires_acceptance'>>) {
+/** Administratorka: zapis (dodanie lub zmiana) i usunięcie notatki wewnętrznej do dokumentu */
+export async function saveDocumentNote(doc: Pick<ClientDocument, 'id' | 'client_id'>, body: string) {
+  must(
+    await sb()
+      .from('document_notes')
+      .upsert({ document_id: doc.id, client_id: doc.client_id, body, updated_at: new Date().toISOString() }, { onConflict: 'document_id' }),
+  )
+}
+export async function deleteDocumentNote(docId: string) {
+  must(await sb().from('document_notes').delete().eq('document_id', docId))
+}
+export async function updateDocument(id: string, patch: Partial<Pick<ClientDocument, 'title' | 'note' | 'content' | 'visible' | 'requires_acceptance' | 'kind'>>) {
   must(await sb().from('client_documents').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id))
 }
 export async function acceptDocument(id: string) {

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Icon, Modal, Spinner, copyText, fmtDate, useToast } from '../components/ui'
 import { renderMarkdown } from '../lib/markdown'
-import { acceptDocument, addDocument, deleteDocument, listDocumentNotes, listDocuments, updateDocument, type ClientDocument } from '../lib/project'
+import { acceptDocument, addDocument, deleteDocument, deleteDocumentNote, listDocumentNotes, listDocuments, saveDocumentNote, updateDocument, type ClientDocument } from '../lib/project'
 import type { Client } from '../lib/types'
 import { signedUrls } from '../lib/workspace'
 import { Empty, Field, Toggle } from './bits'
 
 export default function Documents({
-  client, isAdmin, adminTools, caseId, onChanged,
+  client, isAdmin, adminTools, caseId, onChanged, only,
 }: {
   client: Client
   isAdmin: boolean
@@ -15,6 +15,8 @@ export default function Documents({
   /** tylko dokumenty tej sprawy bieżącej; nowe dokumenty trafiają do niej */
   caseId?: string
   onChanged?: () => void
+  /** w sprawie: tylko umowy ('contract') albo wszystko poza umowami ('other') */
+  only?: 'contract' | 'other'
 }) {
   const toast = useToast()
   const [docs, setDocs] = useState<ClientDocument[] | null>(null)
@@ -23,14 +25,16 @@ export default function Documents({
 
   const load = useCallback(async () => {
     const all = await listDocuments(client.id)
-    const list = caseId ? all.filter((d) => d.case_id === caseId) : all
+    const list = (caseId ? all.filter((d) => d.case_id === caseId) : all).filter((d) =>
+      only === 'contract' ? d.kind === 'contract' : only === 'other' ? d.kind !== 'contract' : true,
+    )
     if (isAdmin) {
       const notes = await listDocumentNotes(client.id).catch(() => ({}) as Record<string, string>)
       list.forEach((d) => (d.admin_note = notes[d.id] ?? null))
     }
     setDocs(list)
     onChanged?.()
-  }, [client.id, isAdmin, caseId, onChanged])
+  }, [client.id, isAdmin, caseId, onChanged, only])
   useEffect(() => {
     load().catch((e) => toast((e as Error).message))
   }, [load, toast])
@@ -63,14 +67,18 @@ export default function Documents({
         <div className="ws-savebar">
           <span className="muted" style={{ fontSize: 14 }}>Umowy, gotowe dokumenty i inne pliki dla klienta, z akceptacją online.</span>
           <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
-            <Icon name="plus" size={15} /> Dodaj dokument
+            <Icon name="plus" size={15} /> {only === 'contract' ? 'Dodaj umowę' : 'Dodaj dokument'}
           </button>
         </div>
       )}
 
       {docs.length === 0 ? (
         caseId ? (
-          <p className="muted" style={{ margin: 0 }}>{isAdmin ? 'Brak dokumentów w tej sprawie.' : 'Dokumenty do tej sprawy pojawią się tutaj.'}</p>
+          <p className="muted" style={{ margin: 0 }}>
+            {only === 'contract'
+              ? isAdmin ? 'Brak umów w tej sprawie.' : 'Umowy do tej sprawy pojawią się tutaj.'
+              : isAdmin ? 'Brak dokumentów w tej sprawie.' : 'Dokumenty do tej sprawy pojawią się tutaj.'}
+          </p>
         ) : (
         <Empty title={isAdmin ? 'Brak dokumentów' : 'Tu znajdziesz dokumenty'} text={isAdmin ? 'Dodaj umowę albo przygotuj dokumenty prawne.' : 'Umowa i dokumenty do Twojej strony pojawią się tutaj. Dostaniesz ode mnie wiadomość.'} />
         )
@@ -97,11 +105,7 @@ export default function Documents({
                   <span>dodano {fmtDate(d.created_at)}</span>
                 </div>
                 {d.note && <p className="muted" style={{ margin: '6px 0 0', fontSize: 14 }}>{d.note}</p>}
-                {isAdmin && d.admin_note && (
-                  <p className="admin-note">
-                    <strong>Notatka wewnętrzna (klient jej nie widzi):</strong> {d.admin_note}
-                  </p>
-                )}
+                {isAdmin && <AdminNote doc={d} onChanged={load} />}
                 {isAdmin && d.content?.includes('[DO UZUPEŁNIENIA') && <span className="badge in_progress" style={{ marginTop: 6 }}>Są miejsca do uzupełnienia</span>}
               </div>
               <div className="actions">
@@ -150,7 +154,7 @@ export default function Documents({
         <AddDoc
           onClose={() => setAdding(false)}
           onSave={async (title, file, requires, visible, note) => {
-            await addDocument(client.id, title, file, { requiresAcceptance: requires, visible, note, caseId })
+            await addDocument(client.id, title, file, { requiresAcceptance: requires, visible, note, caseId, kind: only === 'contract' ? 'contract' : undefined })
             setAdding(false)
             load()
           }}
@@ -263,6 +267,76 @@ function DocReader({ doc, isAdmin, onClose, onSaved, onAccept }: { doc: ClientDo
           <article className="md card" style={{ padding: '32px 40px' }} dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
         )}
       </div>
+    </div>
+  )
+}
+
+/** Notatka wewnętrzna do dokumentu: dodanie, edycja, usunięcie (klient jej nie widzi) */
+function AdminNote({ doc, onChanged }: { doc: ClientDocument; onChanged: () => Promise<void> }) {
+  const toast = useToast()
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(doc.admin_note ?? '')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setText(doc.admin_note ?? ''), [doc.admin_note])
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      if (text.trim()) await saveDocumentNote(doc, text.trim())
+      else await deleteDocumentNote(doc.id)
+      setEditing(false)
+      await onChanged()
+    } catch (e) {
+      toast((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (editing)
+    return (
+      <div className="admin-note admin-note-edit">
+        <strong>Notatka wewnętrzna (klient jej nie widzi)</strong>
+        <textarea className="textarea" style={{ minHeight: 110 }} value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+        <div className="row">
+          <button className="btn btn-sm" onClick={() => { setText(doc.admin_note ?? ''); setEditing(false) }}>
+            Anuluj
+          </button>
+          <button className="btn btn-sm btn-primary" disabled={busy} onClick={save}>
+            Zapisz
+          </button>
+        </div>
+      </div>
+    )
+  if (!doc.admin_note)
+    return (
+      <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setEditing(true)}>
+        <Icon name="plus" size={14} /> Notatka wewnętrzna
+      </button>
+    )
+  return (
+    <div className="admin-note">
+      <strong>Notatka wewnętrzna (klient jej nie widzi):</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{doc.admin_note}</span>
+      <span className="admin-note-tools">
+        <button className="link-btn" onClick={() => setEditing(true)}>
+          edytuj
+        </button>
+        {' · '}
+        <button
+          className="link-btn"
+          onClick={async () => {
+            if (!confirm('Usunąć notatkę wewnętrzną?')) return
+            try {
+              await deleteDocumentNote(doc.id)
+              await onChanged()
+            } catch (e) {
+              toast((e as Error).message)
+            }
+          }}
+        >
+          usuń
+        </button>
+      </span>
     </div>
   )
 }
