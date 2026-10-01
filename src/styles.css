@@ -3941,3 +3941,28 @@ button.case-row:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.case-sections-item.draggable {
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  cursor: grab;
+}
+.case-sections-item.draggable.dragging {
+  opacity: 0.45;
+}
+.case-sections-item.draggable.over {
+  border-color: var(--teal);
+  box-shadow: 0 -3px 0 var(--teal) inset;
+}
+.case-sections-item.off {
+  padding: 6px 8px;
+  opacity: 0.75;
+}
+.drag-handle {
+  width: 14px;
+  color: var(--muted);
+  letter-spacing: -2px;
+  user-select: none;
+}

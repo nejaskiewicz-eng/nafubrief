@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, Modal, Spinner, StatusBadge, fmtDate, useToast } from '../components/ui'
 import { api } from '../lib/api'
@@ -167,7 +167,6 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
   const [editing, setEditing] = useState(false)
   const [inviting, setInviting] = useState(false)
   const canEditCase = isAdmin || (c.created_by === 'client' && c.status === 'open')
-  const on = (k: CaseSection) => (c.sections ?? []).includes(k)
   const locked = c.status === 'closed'
 
   const loadItems = useCallback(async () => {
@@ -247,55 +246,68 @@ function CaseView({ client, c, isAdmin, onBack, onChanged }: { client: Client; c
         <Spinner />
       ) : (
         <>
-          {on('tasks') && <TasksBlock client={client} c={c} tasks={items.tasks} isAdmin={isAdmin} locked={locked} run={run} />}
-          {on('tips') && <TipsBlock c={c} isAdmin={isAdmin} locked={locked} />}
-          {on('briefs') && <BriefsBlock client={client} c={c} briefs={items.briefs} isAdmin={isAdmin} locked={locked} run={run} />}
-
-          {on('contracts') && (
-            <section className="card case-sec">
-              <SecHead title="Umowy" hint={isAdmin ? 'Umowy w tej sprawie. Szkic widzisz tylko Ty, dopóki go nie udostępnisz.' : 'Przeczytaj i zaakceptuj umowy w tej sprawie.'} />
-              {isAdmin && !locked && (
-                <LinkExisting
-                  label="Podepnij umowę"
-                  load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
-                  onPick={(id) => run(async () => { await linkItem('client_documents', id, c.id); await updateDocument(id, { kind: 'contract' }) }, 'Podpięto umowę')}
-                />
-              )}
-              <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="contract" key={`k-${items.documents.length}`} />
-            </section>
-          )}
-
-          {on('documents') && (
-            <section className="card case-sec">
-              <SecHead title="Dokumenty" hint={isAdmin ? 'Szkice są widoczne tylko dla Ciebie, dopóki ich nie udostępnisz.' : 'Przeczytaj i zaakceptuj dokumenty przygotowane w tej sprawie.'} />
-              {isAdmin && !locked && (
-                <LinkExisting
-                  label="Podepnij dokument"
-                  load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
-                  onPick={(id) => run(() => linkItem('client_documents', id, c.id), 'Podpięto dokument')}
-                />
-              )}
-              <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="other" key={`d-${items.documents.length}`} />
-            </section>
-          )}
-
-          {on('access') && (
-            <section className="card case-sec">
-              <SecHead title="Dostępy" hint={isAdmin ? 'Dopisz, do czego potrzebujesz dostępu w tej sprawie.' : 'Tu udzielasz dostępów potrzebnych w tej sprawie.'} />
-              {isAdmin && !locked && (
-                <LinkExisting
-                  label="Podepnij dostęp z listy"
-                  load={async () => (await listAccess(client.id)).filter((a) => !a.case_id).map((a) => ({ id: a.id, label: a.title }))}
-                  onPick={(id) => run(() => linkItem('access_items', id, c.id), 'Podpięto dostęp')}
-                />
-              )}
-              <Access clientId={client.id} isAdmin={isAdmin} caseId={c.id} key={`a-${items.access.length}`} />
-            </section>
-          )}
-
-          {on('media') && <MediaBlock c={c} isAdmin={isAdmin} locked={locked} />}
-          {on('chat') && <CaseChat c={c} isAdmin={isAdmin} />}
-          {on('closing') && <Closing c={c} isAdmin={isAdmin} run={run} />}
+          {(c.sections ?? []).map((k) => {
+            const el: Record<CaseSection, ReactNode> = {
+              tasks: (
+                <TasksBlock client={client} c={c} tasks={items.tasks} isAdmin={isAdmin} locked={locked} run={run} />
+              ),
+              tips: (
+                <TipsBlock c={c} isAdmin={isAdmin} locked={locked} />
+              ),
+              briefs: (
+                <BriefsBlock client={client} c={c} briefs={items.briefs} isAdmin={isAdmin} locked={locked} run={run} />
+              ),
+              contracts: (
+                <section className="card case-sec">
+                <SecHead title="Umowy" hint={isAdmin ? 'Umowy w tej sprawie. Szkic widzisz tylko Ty, dopóki go nie udostępnisz.' : 'Przeczytaj i zaakceptuj umowy w tej sprawie.'} />
+                {isAdmin && !locked && (
+                  <LinkExisting
+                    label="Podepnij umowę"
+                    load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
+                    onPick={(id) => run(async () => { await linkItem('client_documents', id, c.id); await updateDocument(id, { kind: 'contract' }) }, 'Podpięto umowę')}
+                  />
+                )}
+                <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="contract" key={`k-${items.documents.length}`} />
+              </section>
+              ),
+              documents: (
+                <section className="card case-sec">
+                <SecHead title="Dokumenty" hint={isAdmin ? 'Szkice są widoczne tylko dla Ciebie, dopóki ich nie udostępnisz.' : 'Przeczytaj i zaakceptuj dokumenty przygotowane w tej sprawie.'} />
+                {isAdmin && !locked && (
+                  <LinkExisting
+                    label="Podepnij dokument"
+                    load={async () => (await listDocuments(client.id)).filter((d) => !d.case_id).map((d) => ({ id: d.id, label: d.title }))}
+                    onPick={(id) => run(() => linkItem('client_documents', id, c.id), 'Podpięto dokument')}
+                  />
+                )}
+                <Documents client={client} isAdmin={isAdmin} caseId={c.id} only="other" key={`d-${items.documents.length}`} />
+              </section>
+              ),
+              access: (
+                <section className="card case-sec">
+                <SecHead title="Dostępy" hint={isAdmin ? 'Dopisz, do czego potrzebujesz dostępu w tej sprawie.' : 'Tu udzielasz dostępów potrzebnych w tej sprawie.'} />
+                {isAdmin && !locked && (
+                  <LinkExisting
+                    label="Podepnij dostęp z listy"
+                    load={async () => (await listAccess(client.id)).filter((a) => !a.case_id).map((a) => ({ id: a.id, label: a.title }))}
+                    onPick={(id) => run(() => linkItem('access_items', id, c.id), 'Podpięto dostęp')}
+                  />
+                )}
+                <Access clientId={client.id} isAdmin={isAdmin} caseId={c.id} key={`a-${items.access.length}`} />
+              </section>
+              ),
+              media: (
+                <MediaBlock c={c} isAdmin={isAdmin} locked={locked} />
+              ),
+              chat: (
+                <CaseChat c={c} isAdmin={isAdmin} />
+              ),
+              closing: (
+                <Closing c={c} isAdmin={isAdmin} run={run} />
+              ),
+            }
+            return <Fragment key={k}>{el[k]}</Fragment>
+          })}
         </>
       )}
 
@@ -925,32 +937,83 @@ function PriorityPick({ value, onChange }: { value: CasePriority; onChange: (v: 
 
 function SectionsPicker({ c, run }: { c: Case; run: (fn: () => Promise<unknown>, msg?: string) => Promise<void> }) {
   const [open, setOpen] = useState(false)
-  const active = c.sections ?? []
-  const toggle = (k: CaseSection) => {
-    const next = active.includes(k) ? active.filter((x) => x !== k) : [...active, k]
-    run(() => updateCase(c.id, { sections: SECTIONS.map((s) => s.key).filter((x) => next.includes(x)) }))
+  const [order, setOrder] = useState<CaseSection[]>(c.sections ?? [])
+  const [drag, setDrag] = useState<CaseSection | null>(null)
+  const [over, setOver] = useState<CaseSection | null>(null)
+  useEffect(() => setOrder(c.sections ?? []), [c.sections])
+  const label = (k: CaseSection) => SECTIONS.find((s) => s.key === k)
+  const off = SECTIONS.map((s) => s.key).filter((k) => !order.includes(k))
+  const save = (next: CaseSection[]) => {
+    setOrder(next)
+    run(() => updateCase(c.id, { sections: next }))
+  }
+  const move = (k: CaseSection, to: number) => {
+    const rest = order.filter((x) => x !== k)
+    rest.splice(Math.max(0, Math.min(to, rest.length)), 0, k)
+    save(rest)
   }
   return (
     <div className={`case-sections${open ? ' is-open' : ''}`}>
       <button className="case-sections-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span>
           <strong>Sekcje w tej sprawie</strong>
-          <span className="muted"> · {SECTIONS.filter((s) => active.includes(s.key)).map((s) => s.label).join(', ') || 'brak'}</span>
+          <span className="muted"> · {order.map((k) => label(k)?.label).join(', ') || 'brak'}</span>
         </span>
         <Icon name={open ? 'up' : 'down'} size={16} />
       </button>
       {open && (
         <div className="case-sections-list">
-          {SECTIONS.map((s) => (
-            <label key={s.key} className="case-sections-item">
-              <input type="checkbox" checked={active.includes(s.key)} onChange={() => toggle(s.key)} />
+          <p className="muted" style={{ margin: '0 0 4px', fontSize: 13 }}>Przeciągnij, żeby zmienić kolejność. Klient widzi tylko włączone sekcje, w tej samej kolejności.</p>
+          {order.map((k, i) => (
+            <div
+              key={k}
+              className={`case-sections-item draggable${drag === k ? ' dragging' : ''}${over === k && drag !== k ? ' over' : ''}`}
+              draggable
+              onDragStart={(e) => {
+                setDrag(k)
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setOver(k)
+              }}
+              onDragLeave={() => setOver((o) => (o === k ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (drag && drag !== k) move(drag, order.indexOf(k))
+                setDrag(null)
+                setOver(null)
+              }}
+              onDragEnd={() => {
+                setDrag(null)
+                setOver(null)
+              }}
+            >
+              <span className="drag-handle" aria-hidden>⋮⋮</span>
+              <input type="checkbox" checked onChange={() => save(order.filter((x) => x !== k))} aria-label={`Wyłącz sekcję ${label(k)?.label}`} />
+              <span style={{ flex: 1 }}>
+                <strong>{label(k)?.label}</strong>
+                <span className="muted"> - {label(k)?.hint}</span>
+              </span>
+              <button className="btn btn-ghost btn-icon" aria-label="Wyżej" disabled={i === 0} onClick={() => move(k, i - 1)}>
+                <Icon name="up" size={14} />
+              </button>
+              <button className="btn btn-ghost btn-icon" aria-label="Niżej" disabled={i === order.length - 1} onClick={() => move(k, i + 1)}>
+                <Icon name="down" size={14} />
+              </button>
+            </div>
+          ))}
+          {off.length > 0 && <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>Wyłączone</div>}
+          {off.map((k) => (
+            <label key={k} className="case-sections-item off">
+              <span className="drag-handle" aria-hidden />
+              <input type="checkbox" checked={false} onChange={() => save([...order, k])} />
               <span>
-                <strong>{s.label}</strong>
-                <span className="muted"> - {s.hint}</span>
+                <strong>{label(k)?.label}</strong>
+                <span className="muted"> - {label(k)?.hint}</span>
               </span>
             </label>
           ))}
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Klient widzi tylko włączone sekcje. Wyłączenie sekcji niczego nie usuwa.</p>
         </div>
       )}
     </div>
