@@ -18,6 +18,7 @@ import { ToneFields, toneSummary } from '../../components/ToneFields'
 import { caseUnread } from '../../lib/cases'
 import Documents from '../../workspace/Documents'
 import Media from '../../workspace/Media'
+import MediaLinks from '../../workspace/MediaLinks'
 import Preview from '../../workspace/Preview'
 import Start from '../../workspace/Start'
 import { TEMPLATES } from '../../templates'
@@ -118,7 +119,12 @@ export default function ClientDetail() {
       {tab === 'dostepy' && <Access clientId={client.id} isAdmin />}
       {tab === 'dokumenty' && <Documents client={client} isAdmin adminTools={<LegalCommands client={client} />} />}
       {tab === 'profil' && <Profile clientId={client.id} />}
-      {tab === 'media' && <Media clientId={client.id} />}
+      {tab === 'media' && (
+        <>
+          <MediaLinks clientId={client.id} />
+          <Media clientId={client.id} />
+        </>
+      )}
       {tab === 'zespol' && <Team clientId={client.id} />}
       {tab === 'uslugi' && <Services clientId={client.id} />}
       {tab === 'wiadomosci' && <Messages clientId={client.id} isAdmin />}

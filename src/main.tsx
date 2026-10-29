@@ -6,6 +6,7 @@ import Login from './pages/admin/Login'
 import BriefFormPage, { Notice } from './pages/client/BriefForm'
 import ClientArea, { ClientTab } from './pages/client/ClientArea'
 import Portal from './pages/client/Portal'
+import MediaUpload from './pages/client/MediaUpload'
 import './styles.css'
 
 // Panel administratorki ładowany osobno: klient nie pobiera jego kodu
@@ -33,6 +34,8 @@ const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/panel" replace /> },
   { path: '/login', element: <Login /> },
   { path: '/logowanie', element: <Login variant="client" /> },
+  // link do wgrywania mediów dla firm zewnętrznych (bez konta)
+  { path: '/wgraj/:token', element: <MediaUpload /> },
   // podglądy (pełny ekran, bez menu panelu)
   { path: '/panel/ankieta/:id/podglad', element: S(<BriefPreview />) },
   { path: '/panel/szablony/:key/podglad', element: S(<BriefPreview />) },

@@ -78,7 +78,7 @@ export default function Media({ clientId }: { clientId: string }) {
         <div>
           <strong>Przeciągnij tutaj zdjęcia, filmy i dokumenty</strong>
           <p className="muted" style={{ margin: '4px 0 0', fontSize: 14 }}>
-            albo wybierz je z komputera lub telefonu. Jeden plik może mieć do 50 MB. Większe filmy dodaj jako link.
+            albo wybierz je z komputera lub telefonu. Jeden plik może mieć do 5 GB.
           </p>
         </div>
         <div className="drop-actions">

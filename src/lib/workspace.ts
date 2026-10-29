@@ -107,7 +107,7 @@ export async function uploadFile(
   file: File,
   opts: { kind: FileKind; category?: string; memberId?: string; note?: string } = { kind: 'media' },
 ): Promise<ClientFile> {
-  if (file.size > 50 * 1024 * 1024) throw new Error(`Plik „${file.name}” ma ponad 50 MB. Duże filmy dodaj jako link (np. Dysk Google, WeTransfer).`)
+  if (file.size > 5 * 1024 * 1024 * 1024) throw new Error(`Plik „${file.name}” ma ponad 5 GB. Taki film dodaj jako link (np. Dysk Google, WeTransfer).`)
   const path = `${clientId}/${opts.kind}/${newId()}-${safeName(file.name)}`
   const up = await sb().storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false })
   if (up.error) throw new Error(up.error.message)
@@ -147,6 +147,38 @@ export async function updateFile(id: string, patch: Partial<Pick<ClientFile, 'ca
 export async function deleteFile(f: ClientFile) {
   if (f.path) await sb().storage.from(BUCKET).remove([f.path])
   must(await sb().from('client_files').delete().eq('id', f.id))
+}
+
+/* ---------- linki do wgrywania mediów (firmy zewnętrzne, bez konta) ---------- */
+
+export interface MediaLink {
+  id: string
+  client_id: string
+  token: string
+  label: string
+  expires_at: string | null
+  revoked_at: string | null
+  used_at: string | null
+  created_at: string
+}
+
+export const mediaLinkUrl = (l: MediaLink) => `${window.location.origin}/wgraj/${l.token}`
+
+export async function listMediaLinks(clientId: string): Promise<MediaLink[]> {
+  return must(await sb().from('media_links').select('*').eq('client_id', clientId).order('created_at', { ascending: false }))
+}
+export async function createMediaLink(clientId: string, label: string, expiresAt: string | null): Promise<MediaLink> {
+  return must(await sb().from('media_links').insert({ client_id: clientId, label, expires_at: expiresAt }).select().single())
+}
+export async function setMediaLinkRevoked(id: string, revoked: boolean) {
+  must(await sb().from('media_links').update({ revoked_at: revoked ? new Date().toISOString() : null }).eq('id', id))
+}
+/** Liczba plików wgranych każdym linkiem */
+export async function mediaLinkCounts(clientId: string): Promise<Record<string, number>> {
+  const rows = must(await sb().from('client_files').select('media_link_id').eq('client_id', clientId).not('media_link_id', 'is', null))
+  const out: Record<string, number> = {}
+  ;(rows as { media_link_id: string }[]).forEach((r) => (out[r.media_link_id] = (out[r.media_link_id] ?? 0) + 1))
+  return out
 }
 
 /** Tymczasowe linki do plików (ważne godzinę) */
@@ -277,4 +309,10 @@ export async function unreadCount(clientId: string, iAmAdmin: boolean): Promise<
 }
 
 export const fmtSize = (b: number | null) =>
-  b == null ? '' : b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`
+  b == null
+    ? ''
+    : b < 1024 * 1024
+      ? `${Math.max(1, Math.round(b / 1024))} KB`
+      : b < 1024 * 1024 * 1024
+        ? `${(b / 1024 / 1024).toFixed(1)} MB`
+        : `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`
