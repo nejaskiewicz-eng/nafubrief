@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Icon } from '../components/ui'
 
 export function Field({
   label,
@@ -63,6 +64,37 @@ export function Empty({ title, text, children }: { title: string; text: string; 
         {text}
       </p>
       {children}
+    </div>
+  )
+}
+
+/** Foldery bazy mediów (np. salony): wybór folderu do przeglądania; '' = wszystkie, NO_FOLDER = pliki bez folderu */
+export const NO_FOLDER = '\u0000'
+export function FolderBar({
+  folders, files, value, onChange,
+}: {
+  folders: string[]
+  files: { folder?: string | null }[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  if (!folders.length) return null
+  const count = (f: string) => files.filter((x) => (f === NO_FOLDER ? !x.folder || !folders.includes(x.folder) : x.folder === f)).length
+  const loose = count(NO_FOLDER)
+  const items: Array<[string, string, number]> = [
+    ['', 'Wszystkie', files.length],
+    ...folders.map((f): [string, string, number] => [f, f, count(f)]),
+    ...(loose ? [[NO_FOLDER, 'Bez folderu', loose] as [string, string, number]] : []),
+  ]
+  return (
+    <div className="folder-bar" role="tablist" aria-label="Foldery">
+      {items.map(([key, label, n]) => (
+        <button key={label} role="tab" aria-selected={value === key} className={`folder-btn${value === key ? ' on' : ''}`} onClick={() => onChange(key)}>
+          <Icon name="folder" size={20} />
+          {label}
+          <small>{n}</small>
+        </button>
+      ))}
     </div>
   )
 }

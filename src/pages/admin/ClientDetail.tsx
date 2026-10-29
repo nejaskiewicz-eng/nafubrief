@@ -122,7 +122,7 @@ export default function ClientDetail() {
       {tab === 'media' && (
         <>
           <MediaLinks clientId={client.id} />
-          <Media clientId={client.id} />
+          <Media clientId={client.id} isAdmin />
         </>
       )}
       {tab === 'zespol' && <Team clientId={client.id} />}

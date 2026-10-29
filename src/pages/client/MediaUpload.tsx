@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { CONTACT, Icon, Loading, fmtDate } from '../../components/ui'
 import { MEDIA_CATEGORIES, fmtSize, type ClientFile } from '../../lib/workspace'
-import { Empty } from '../../workspace/bits'
+import { Empty, FolderBar, NO_FOLDER } from '../../workspace/bits'
 import { Notice } from './BriefForm'
 
 // Strona dla firmy zewnętrznej z linkiem: wgrywa pliki do bazy mediów klienta i widzi tylko to, co sama wgrała.
@@ -11,6 +11,7 @@ type LinkFile = ClientFile & { preview: string | null }
 interface Info {
   client: string
   label: string
+  folders: string[]
   expires_at: string | null
   files: LinkFile[]
 }
@@ -58,6 +59,8 @@ export default function MediaUpload() {
   const [fail, setFail] = useState<string | null>(null)
   const [category, setCategory] = useState(MEDIA_CATEGORIES[0])
   const [filter, setFilter] = useState('Wszystkie')
+  const [folder, setFolder] = useState('')
+  const [target, setTarget] = useState('')
   const [progress, setProgress] = useState<{ name: string; index: number; total: number; loaded: number; size: number } | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [drag, setDrag] = useState(false)
@@ -65,7 +68,9 @@ export default function MediaUpload() {
 
   const load = useCallback(async () => {
     try {
-      setInfo(await call<Info>(token, 'info'))
+      const i = await call<Info>(token, 'info')
+      setInfo(i)
+      setTarget((t) => (i.folders.includes(t) ? t : i.folders[0] ?? ''))
     } catch (e) {
       setFail((e as Error).message)
     }
@@ -97,7 +102,7 @@ export default function MediaUpload() {
       try {
         const { path, url } = await call<{ path: string; url: string }>(token, 'sign', { name: file.name })
         await put(url, file, (loaded) => setProgress((p) => (p ? { ...p, loaded } : p)))
-        await call(token, 'add', { path, name: file.name, category })
+        await call(token, 'add', { path, name: file.name, category, folder: target || null })
       } catch (e) {
         errs.push((e as Error).message)
       }
@@ -110,9 +115,16 @@ export default function MediaUpload() {
   if (fail) return <Notice title="Link nie działa" text={fail} />
   if (!info) return <Loading />
 
-  const files = info.files
-  const cats = ['Wszystkie', ...MEDIA_CATEGORIES.filter((c) => files.some((f) => f.category === c))]
-  const shown = filter === 'Wszystkie' ? files : files.filter((f) => f.category === filter)
+  const { files, folders } = info
+  const inFolder =
+    folder === '' ? files : files.filter((f) => (folder === NO_FOLDER ? !f.folder || !folders.includes(f.folder) : f.folder === folder))
+  const cats = ['Wszystkie', ...MEDIA_CATEGORIES.filter((c) => inFolder.some((f) => f.category === c))]
+  const shown = filter === 'Wszystkie' ? inFolder : inFolder.filter((f) => f.category === filter)
+  const pickFolder = (f: string) => {
+    setFolder(f)
+    setFilter('Wszystkie')
+    if (folders.includes(f)) setTarget(f)
+  }
   const pct = progress && progress.size ? Math.round((progress.loaded / progress.size) * 100) : 0
 
   return (
@@ -134,6 +146,7 @@ export default function MediaUpload() {
 
       <main className="wrap cz-main">
         <div className="ws">
+          <FolderBar folders={folders} files={files} value={folder} onChange={pickFolder} />
           <div
             className={`drop${drag ? ' over' : ''}`}
             onDragOver={(e) => {
@@ -158,6 +171,17 @@ export default function MediaUpload() {
               </p>
             </div>
             <div className="drop-actions">
+              {folders.length > 0 && (
+                <label className="field" style={{ minWidth: 220 }}>
+                  <span className="label">Folder (salon)</span>
+                  <select className="select" value={target} onChange={(e) => setTarget(e.target.value)} disabled={!!progress}>
+                    {folders.map((f) => (
+                      <option key={f}>{f}</option>
+                    ))}
+                    <option value="">Bez folderu</option>
+                  </select>
+                </label>
+              )}
               <label className="field" style={{ minWidth: 220 }}>
                 <span className="label">Kategoria wgrywanych plików</span>
                 <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} disabled={!!progress}>
@@ -208,14 +232,19 @@ export default function MediaUpload() {
           )}
 
           {files.length === 0 ? (
-            <Empty title="Nic jeszcze nie wgrano" text="Pliki wgrane tym linkiem pojawią się tutaj. Możesz potem zmienić im kategorię albo je usunąć." />
+            <Empty
+              title="Nic jeszcze nie wgrano"
+              text={`Pliki wgrane tym linkiem pojawią się tutaj. ${folders.length ? 'Przed wgraniem wybierz folder salonu. ' : ''}Możesz potem zmienić im folder, kategorię albo je usunąć.`}
+            />
+          ) : inFolder.length === 0 ? (
+            <Empty title="Ten folder jest pusty" text="Wybierz go jako folder wgrywanych plików i dodaj zdjęcia albo filmy." />
           ) : (
             <>
               <div className="chips-filter">
                 {cats.map((c) => (
                   <button key={c} className={`chip${filter === c ? ' on' : ''}`} onClick={() => setFilter(c)}>
                     {c}
-                    <span>{c === 'Wszystkie' ? files.length : files.filter((f) => f.category === c).length}</span>
+                    <span>{c === 'Wszystkie' ? inFolder.length : inFolder.filter((f) => f.category === c).length}</span>
                   </button>
                 ))}
               </div>
@@ -252,6 +281,23 @@ export default function MediaUpload() {
                           <option key={c}>{c}</option>
                         ))}
                       </select>
+                      {folders.length > 0 && (
+                        <select
+                          className="select media-cat"
+                          aria-label="Folder"
+                          value={f.folder && folders.includes(f.folder) ? f.folder : ''}
+                          onChange={async (e) => {
+                            const fo = e.target.value || null
+                            await call(token, 'update', { id: f.id, folder: fo })
+                            setInfo({ ...info, files: files.map((x) => (x.id === f.id ? { ...x, folder: fo } : x)) })
+                          }}
+                        >
+                          <option value="">Bez folderu</option>
+                          {folders.map((fo) => (
+                            <option key={fo}>{fo}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <button
                       className="btn btn-ghost btn-icon media-del"

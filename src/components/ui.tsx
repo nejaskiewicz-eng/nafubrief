@@ -38,7 +38,7 @@ export const Check = () => (
   </svg>
 )
 
-type IconName = 'users' | 'plus' | 'copy' | 'link' | 'edit' | 'trash' | 'eye' | 'sparkle' | 'up' | 'down' | 'mail' | 'phone' | 'logout' | 'back' | 'print' | 'download' | 'unlock' | 'doc'
+type IconName = 'users' | 'plus' | 'copy' | 'link' | 'edit' | 'trash' | 'eye' | 'sparkle' | 'up' | 'down' | 'mail' | 'phone' | 'logout' | 'back' | 'print' | 'download' | 'unlock' | 'doc' | 'folder'
 
 const PATHS: Record<IconName, string> = {
   users: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm13 9v-1a4 4 0 0 0-3-3.9M16 3.1a3.5 3.5 0 0 1 0 6.8',
@@ -59,6 +59,7 @@ const PATHS: Record<IconName, string> = {
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   unlock: 'M7 11V7a5 5 0 0 1 9.6-2M5 11h14v10H5z',
   doc: 'M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6',
+  folder: 'M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z',
 }
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {

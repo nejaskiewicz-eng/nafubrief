@@ -82,6 +82,8 @@ export interface ClientFile {
   size: number | null
   note: string | null
   member_id: string | null
+  /** folder w bazie mediów (np. salon) */
+  folder?: string | null
   /** kto dodał: true pracownia, false klient (ustawia baza) */
   from_admin?: boolean
   created_at: string
@@ -105,7 +107,7 @@ const safeName = (n: string) =>
 export async function uploadFile(
   clientId: string,
   file: File,
-  opts: { kind: FileKind; category?: string; memberId?: string; note?: string } = { kind: 'media' },
+  opts: { kind: FileKind; category?: string; memberId?: string; note?: string; folder?: string | null } = { kind: 'media' },
 ): Promise<ClientFile> {
   if (file.size > 5 * 1024 * 1024 * 1024) throw new Error(`Plik „${file.name}” ma ponad 5 GB. Taki film dodaj jako link (np. Dysk Google, WeTransfer).`)
   const path = `${clientId}/${opts.kind}/${newId()}-${safeName(file.name)}`
@@ -117,17 +119,20 @@ export async function uploadFile(
       .insert({
         client_id: clientId, kind: opts.kind, category: opts.category ?? null, name: file.name, path,
         mime: file.type || null, size: file.size, note: opts.note ?? null, member_id: opts.memberId ?? null,
+        folder: opts.folder ?? null,
       })
       .select()
       .single(),
   )
 }
 
-export async function addLink(clientId: string, name: string, url: string, category?: string, note?: string): Promise<ClientFile> {
+export async function addLink(
+  clientId: string, name: string, url: string, category?: string, note?: string, folder?: string | null,
+): Promise<ClientFile> {
   return must(
     await sb()
       .from('client_files')
-      .insert({ client_id: clientId, kind: 'media', category: category ?? null, name, url, note: note ?? null })
+      .insert({ client_id: clientId, kind: 'media', category: category ?? null, name, url, note: note ?? null, folder: folder ?? null })
       .select()
       .single(),
   )
@@ -140,13 +145,22 @@ export async function listFiles(clientId: string, kind?: FileKind, memberId?: st
   return must(await q)
 }
 
-export async function updateFile(id: string, patch: Partial<Pick<ClientFile, 'category' | 'note' | 'name'>>) {
+export async function updateFile(id: string, patch: Partial<Pick<ClientFile, 'category' | 'note' | 'name' | 'folder'>>) {
   must(await sb().from('client_files').update(patch).eq('id', id))
 }
 
 export async function deleteFile(f: ClientFile) {
   if (f.path) await sb().storage.from(BUCKET).remove([f.path])
   must(await sb().from('client_files').delete().eq('id', f.id))
+}
+
+/** Foldery bazy mediów klienta (np. salony); listę ustawia administratorka */
+export async function getMediaFolders(clientId: string): Promise<string[]> {
+  const { data } = await sb().from('clients').select('media_folders').eq('id', clientId).maybeSingle()
+  return (data?.media_folders as string[] | null) ?? []
+}
+export async function setMediaFolders(clientId: string, folders: string[]) {
+  must(await sb().from('clients').update({ media_folders: folders }).eq('id', clientId))
 }
 
 /* ---------- linki do wgrywania mediów (firmy zewnętrzne, bez konta) ---------- */

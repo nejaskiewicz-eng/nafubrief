@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon, Modal, Spinner, fmtDate, useToast } from '../components/ui'
 import {
-  MEDIA_CATEGORIES, addLink, deleteFile, fmtSize, listFiles, signedUrls, updateFile, uploadFile, type ClientFile,
+  MEDIA_CATEGORIES, addLink, deleteFile, fmtSize, getMediaFolders, listFiles, setMediaFolders, signedUrls, updateFile, uploadFile,
+  type ClientFile,
 } from '../lib/workspace'
-import { Empty, Field } from './bits'
+import { Empty, Field, FolderBar, NO_FOLDER } from './bits'
 
 const isImage = (f: ClientFile) => !!f.mime?.startsWith('image/')
 const isVideo = (f: ClientFile) => !!f.mime?.startsWith('video/')
 
-export default function Media({ clientId }: { clientId: string }) {
+export default function Media({ clientId, isAdmin = false }: { clientId: string; isAdmin?: boolean }) {
   const toast = useToast()
   const [files, setFiles] = useState<ClientFile[] | null>(null)
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [filter, setFilter] = useState<string>('Wszystkie')
+  const [folders, setFolders] = useState<string[]>([])
+  const [folder, setFolder] = useState('')
+  const [target, setTarget] = useState('')
+  const [foldersOpen, setFoldersOpen] = useState(false)
   const [category, setCategory] = useState(MEDIA_CATEGORIES[0])
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [drag, setDrag] = useState(false)
@@ -20,7 +25,9 @@ export default function Media({ clientId }: { clientId: string }) {
   const input = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
-    const list = await listFiles(clientId, 'media')
+    const [list, fl] = await Promise.all([listFiles(clientId, 'media'), getMediaFolders(clientId)])
+    setFolders(fl)
+    setTarget((t) => (fl.includes(t) ? t : fl[0] ?? ''))
     setFiles(list)
     setUrls(await signedUrls(list.filter((f) => f.path && (isImage(f) || isVideo(f))).map((f) => f.path!)))
   }, [clientId])
@@ -36,7 +43,7 @@ export default function Media({ clientId }: { clientId: string }) {
     const errors: string[] = []
     for (let i = 0; i < arr.length; i++) {
       try {
-        await uploadFile(clientId, arr[i], { kind: 'media', category })
+        await uploadFile(clientId, arr[i], { kind: 'media', category, folder: target || null })
       } catch (e) {
         errors.push((e as Error).message)
       }
@@ -54,11 +61,30 @@ export default function Media({ clientId }: { clientId: string }) {
   }
 
   if (!files) return <Spinner />
-  const cats = ['Wszystkie', ...MEDIA_CATEGORIES.filter((c) => files.some((f) => f.category === c))]
-  const shown = filter === 'Wszystkie' ? files : files.filter((f) => f.category === filter)
+  const inFolder =
+    folder === '' ? files : files.filter((f) => (folder === NO_FOLDER ? !f.folder || !folders.includes(f.folder) : f.folder === folder))
+  const cats = ['Wszystkie', ...MEDIA_CATEGORIES.filter((c) => inFolder.some((f) => f.category === c))]
+  const shown = filter === 'Wszystkie' ? inFolder : inFolder.filter((f) => f.category === filter)
+  const pickFolder = (f: string) => {
+    setFolder(f)
+    setFilter('Wszystkie')
+    if (folders.includes(f)) setTarget(f)
+  }
 
   return (
     <div className="ws">
+      {(folders.length > 0 || isAdmin) && (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <FolderBar folders={folders} files={files} value={folder} onChange={pickFolder} />
+          {isAdmin && (
+            <div>
+              <button className="btn btn-sm btn-ghost" onClick={() => setFoldersOpen(true)}>
+                <Icon name="folder" size={15} /> {folders.length ? 'Zmień foldery' : 'Dodaj foldery (np. salony)'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       <div
         className={`drop${drag ? ' over' : ''}`}
         onDragOver={(e) => {
@@ -82,6 +108,17 @@ export default function Media({ clientId }: { clientId: string }) {
           </p>
         </div>
         <div className="drop-actions">
+          {folders.length > 0 && (
+            <label className="field" style={{ minWidth: 220 }}>
+              <span className="label">Folder</span>
+              <select className="select" value={target} onChange={(e) => setTarget(e.target.value)}>
+                {folders.map((f) => (
+                  <option key={f}>{f}</option>
+                ))}
+                <option value="">Bez folderu</option>
+              </select>
+            </label>
+          )}
           <label className="field" style={{ minWidth: 220 }}>
             <span className="label">Kategoria wgrywanych plików</span>
             <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -114,13 +151,15 @@ export default function Media({ clientId }: { clientId: string }) {
 
       {files.length === 0 ? (
         <Empty title="Baza mediów jest pusta" text="Wgraj logo, zdjęcia salonów i zespołu, filmy, dokumenty. Wszystko w jednym miejscu, gotowe do wykorzystania na stronie." />
+      ) : inFolder.length === 0 ? (
+        <Empty title="Ten folder jest pusty" text="Wybierz go jako folder wgrywanych plików i dodaj zdjęcia albo filmy." />
       ) : (
         <>
           <div className="chips-filter">
             {cats.map((c) => (
               <button key={c} className={`chip${filter === c ? ' on' : ''}`} onClick={() => setFilter(c)}>
                 {c}
-                <span>{c === 'Wszystkie' ? files.length : files.filter((f) => f.category === c).length}</span>
+                <span>{c === 'Wszystkie' ? inFolder.length : inFolder.filter((f) => f.category === c).length}</span>
               </button>
             ))}
           </div>
@@ -156,6 +195,22 @@ export default function Media({ clientId }: { clientId: string }) {
                       <option key={c}>{c}</option>
                     ))}
                   </select>
+                  {folders.length > 0 && (
+                    <select
+                      className="select media-cat"
+                      aria-label="Folder"
+                      value={f.folder && folders.includes(f.folder) ? f.folder : ''}
+                      onChange={async (e) => {
+                        await updateFile(f.id, { folder: e.target.value || null })
+                        setFiles(files.map((x) => (x.id === f.id ? { ...x, folder: e.target.value || null } : x)))
+                      }}
+                    >
+                      <option value="">Bez folderu</option>
+                      {folders.map((fo) => (
+                        <option key={fo}>{fo}</option>
+                      ))}
+                    </select>
+                  )}
                   {f.note && <div className="media-note">{f.note}</div>}
                 </div>
                 <button
@@ -179,13 +234,56 @@ export default function Media({ clientId }: { clientId: string }) {
         <LinkModal
           onClose={() => setLinkOpen(false)}
           onSave={async (name, url, note) => {
-            await addLink(clientId, name, url, category, note)
+            await addLink(clientId, name, url, category, note, target || null)
             setLinkOpen(false)
             await load()
           }}
         />
       )}
+
+      {foldersOpen && (
+        <FoldersModal
+          folders={folders}
+          onClose={() => setFoldersOpen(false)}
+          onSave={async (list) => {
+            await setMediaFolders(clientId, list)
+            setFoldersOpen(false)
+            if (folder && folder !== NO_FOLDER && !list.includes(folder)) setFolder('')
+            await load()
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function FoldersModal({ folders, onClose, onSave }: { folders: string[]; onClose: () => void; onSave: (list: string[]) => Promise<void> }) {
+  const [text, setText] = useState(folders.join('\n'))
+  const [err, setErr] = useState('')
+  return (
+    <Modal label="Foldery" onClose={onClose}>
+      <div className="eyebrow">Baza mediów</div>
+      <h2 style={{ marginTop: 8, marginBottom: 14 }}>Foldery</h2>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Jeden folder w linii, np. nazwy salonów. Pliki z usuniętego folderu nie znikają, trafiają do „Bez folderu”.
+      </p>
+      <Field label="Foldery" value={text} onChange={setText} textarea />
+      {err && <p style={{ color: 'var(--danger)', margin: '8px 0 0' }}>{err}</p>}
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Anuluj
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            const list = [...new Set(text.split('\n').map((l) => l.trim()).filter(Boolean))]
+            onSave(list).catch((e) => setErr((e as Error).message))
+          }}
+        >
+          Zapisz
+        </button>
+      </div>
+    </Modal>
   )
 }
 

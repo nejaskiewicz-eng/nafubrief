@@ -11,6 +11,7 @@ type Body = {
   name?: string
   path?: string
   category?: string | null
+  folder?: string | null
   id?: string
 }
 
@@ -44,12 +45,16 @@ export const handler: Handler = async (event) => {
 
   const { data: link } = await db
     .from('media_links')
-    .select('id, client_id, label, expires_at, revoked_at, clients(name, company)')
+    .select('id, client_id, label, expires_at, revoked_at, clients(name, company, media_folders)')
     .eq('token', body.token)
     .maybeSingle()
   if (!link || link.revoked_at) return json(404, { error: 'Ten link jest nieaktywny. Poproś o nowy.' })
   if (link.expires_at && new Date(link.expires_at) < new Date()) return json(410, { error: 'Ten link wygasł. Poproś o nowy.' })
 
+  const c = link.clients as unknown as { name: string; company: string | null; media_folders: string[] | null } | null
+  const folders = c?.media_folders ?? []
+  // folder tylko z listy klienta; inny albo pusty = bez folderu
+  const folderOf = (f: string | null | undefined) => (f && folders.includes(f) ? f : null)
   const own = () => db.from('client_files').select('*').eq('media_link_id', link.id).eq('kind', 'media')
 
   if (body.action === 'info') {
@@ -63,11 +68,11 @@ export const handler: Handler = async (event) => {
         if (d.path && d.signedUrl) urls[d.path] = d.signedUrl
       })
     }
-    const c = link.clients as unknown as { name: string; company: string | null } | null
     await db.from('media_links').update({ used_at: new Date().toISOString() }).eq('id', link.id)
     return json(200, {
       client: c?.company || c?.name || '',
       label: link.label,
+      folders,
       expires_at: link.expires_at,
       files: (files ?? []).map((f) => ({ ...f, preview: f.path ? urls[f.path] ?? null : null })),
     })
@@ -96,7 +101,7 @@ export const handler: Handler = async (event) => {
     const { data: file, error } = await db
       .from('client_files')
       .insert({
-        client_id: link.client_id, kind: 'media', category: body.category || null,
+        client_id: link.client_id, kind: 'media', category: body.category || null, folder: folderOf(body.folder),
         name: (body.name || path.split('/').pop() || 'plik').slice(0, 200), path,
         mime: info.contentType || null, size: info.size ?? null, uploaded_by: null, media_link_id: link.id,
       })
@@ -110,6 +115,7 @@ export const handler: Handler = async (event) => {
   if (body.action === 'update') {
     const patch: Record<string, string | null> = {}
     if (body.category !== undefined) patch.category = body.category || null
+    if (body.folder !== undefined) patch.folder = folderOf(body.folder)
     if (body.name !== undefined && body.name.trim()) patch.name = body.name.trim().slice(0, 200)
     const { data, error } = await db.from('client_files').update(patch).eq('id', body.id ?? '').eq('media_link_id', link.id).select('id')
     if (error || !data?.length) return json(404, { error: 'Nie znaleziono pliku.' })
