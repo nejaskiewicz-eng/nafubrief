@@ -39,7 +39,11 @@ function put(url: string, file: File, onProgress: (loaded: number) => void) {
     const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
     if (key) xhr.setRequestHeader('apikey', key)
     xhr.upload.onprogress = (e) => onProgress(e.loaded)
-    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Nie udało się wgrać „${file.name}” (${xhr.status}).`)))
+    xhr.onload = () => {
+      if (xhr.status < 300) return resolve()
+      const tooBig = xhr.status === 413 || /EntityTooLarge|too large/i.test(xhr.responseText)
+      reject(new Error(tooBig ? `„${file.name}” jest za duży dla serwera. Daj nam znać, podniesiemy limit.` : `Nie udało się wgrać „${file.name}” (${xhr.status}).`))
+    }
     xhr.onerror = () => reject(new Error(`Przerwane połączenie przy „${file.name}”. Spróbuj jeszcze raz.`))
     const body = new FormData()
     body.append('cacheControl', '3600')
