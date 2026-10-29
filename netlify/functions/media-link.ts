@@ -38,7 +38,7 @@ export const handler: Handler = async (event) => {
   } catch {
     return json(400, { error: 'Nieprawidłowe dane.' })
   }
-  if (!body.token || !/^[a-f0-9]{64}$/.test(body.token)) return json(404, { error: 'Ten link jest nieprawidłowy.' })
+  if (!body.token || !/^[a-z0-9]{10,64}$/.test(body.token)) return json(404, { error: 'Ten link jest nieprawidłowy.' })
 
   const db = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } })
 
